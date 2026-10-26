@@ -28,7 +28,7 @@ to the code and the reasoning behind it.
   outlives both the agent and EDT. The result reports `loadMode`, `loadReason`, the file counts,
   the export and load times, `loadRecord` with `loadRecordState`, and `loadRepeated` when a lost
   infobase connection made the load run twice; `fullLoad=true` forces the whole. An extension is
-  still loaded whole.
+  still loaded whole. ([#46](https://github.com/keyfire/edt-bridge/pull/46))
 
 ## 2026-10-05 – 0.27.3
 
