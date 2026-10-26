@@ -13,6 +13,23 @@ Every entry ends with a link to the pull request it came from -
 requests: an entry without such a link is unfinished, because the reader has no way from the line
 to the code and the reasoning behind it.
 
+## [Unreleased]
+
+### Added
+- **`edt_update_infobase` with `transport=agent` loads only what changed.** The project is still
+  exported whole, but the export is compared file by file with the export of the bridge's last load
+  into the same infobase, and when that is provably safe only the files that differ go in
+  (`--partial --list-file`). A change of one module then costs seconds, where a full load of a
+  configuration of 6,600 files took a minute and a half. Provably safe means the record belongs to
+  this infobase and this platform, the infobase's configuration generation has not moved since -
+  nobody else loaded, synchronized or edited it - no file disappeared and `Configuration.xml` is
+  untouched. Anything else loads the whole configuration, and a partial load the platform rejects
+  is rolled back by it and repeated whole. The record lives in the workspace metadata, so it
+  outlives both the agent and EDT. The result reports `loadMode`, `loadReason`, the file counts,
+  the export and load times, `loadRecord` with `loadRecordState`, and `loadRepeated` when a lost
+  infobase connection made the load run twice; `fullLoad=true` forces the whole. An extension is
+  still loaded whole.
+
 ## 2026-10-05 – 0.27.3
 
 ### Fixed
