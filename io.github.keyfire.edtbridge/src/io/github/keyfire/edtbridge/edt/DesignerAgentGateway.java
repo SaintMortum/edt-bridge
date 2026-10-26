@@ -1255,7 +1255,7 @@ public final class DesignerAgentGateway {
                             : "applied " + collected.size() + " structure change(s)";
                 }
                 if (tracked) {
-                    carrySnapshot(agent, generationBefore, generationId(s));
+                    carrySnapshot(agent, generationBefore, generationIdAfter(s));
                 }
                 return r;
             });
@@ -1419,6 +1419,12 @@ public final class DesignerAgentGateway {
          */
         public String loadRecord;
         public String loadRecordState;
+        /**
+         * Set when a lost infobase connection made the load run a second time, with how far the first
+         * attempt had got. Only the last attempt is reported otherwise, and a repeat that nobody sees
+         * is exactly how a record of the last load once went missing without a trace.
+         */
+        public String loadRepeated;
     }
 
     /** How many of the files a partial load sent are named in its result. */
@@ -1503,7 +1509,14 @@ public final class DesignerAgentGateway {
 
         agent.lock.lock();
         try {
+            String[] stage = {null};
             ExtensionLoadOutcome outcome = withSession(agent, session -> {
+                // withSession runs the body a second time only when the infobase connection was lost.
+                if (stage[0] != null) {
+                    r.loadRepeated = "the infobase connection was lost while " + stage[0]
+                            + "; the agent reconnected and the load ran again from the start";
+                }
+                stage[0] = "starting";
                 // A retried first attempt starts over: what the first one found no longer holds.
                 r.loadMode = null;
                 r.loadReason = null;
@@ -1519,6 +1532,14 @@ public final class DesignerAgentGateway {
                 Path userDir = com._1c.g5.designer.ssh.client.integration.UserDirectoryProvider
                         .get(session, Path.of(agent.baseDir), agent.user);
                 String name = "edtbridge-load-" + java.util.UUID.randomUUID();
+                // The generation is read first: a lost connection then fails the attempt before the
+                // export is spent and before anything is decided on it.
+                Path snapshot = r.extension == null ? snapshotFile(agent) : null;
+                if (snapshot != null) {
+                    stage[0] = "reading the infobase's configuration generation";
+                    r.generationBefore = generationId(session);
+                }
+                stage[0] = "exporting the project";
                 Path exportDir = userDir.resolve(name);
                 Files.createDirectories(exportDir);
                 try {
@@ -1547,7 +1568,6 @@ public final class DesignerAgentGateway {
                     LoadSnapshot export = LoadSnapshot.of(exportDir);
                     export.target = LoadSnapshot.target(agent.connectionString, r.extension);
                     export.platformVersion = agent.platformVersion;
-                    Path snapshot = r.extension == null ? snapshotFile(agent) : null;
                     LoadPlan plan;
                     if (r.extension != null) {
                         plan = LoadPlan.full("an extension is loaded whole - only the configuration is "
@@ -1557,7 +1577,6 @@ public final class DesignerAgentGateway {
                                 + "load in", export.files.size());
                     } else {
                         r.loadRecord = snapshot.toString();
-                        r.generationBefore = generationId(session);
                         boolean present = Files.isRegularFile(snapshot);
                         LoadSnapshot previous = present ? LoadSnapshot.read(snapshot) : null;
                         if (present && previous == null) {
@@ -1579,13 +1598,13 @@ public final class DesignerAgentGateway {
                         r.message = "nothing to load into " + agent.infobase + ": " + plan.reason;
                         return ExtensionLoadOutcome.LOADED;
                     }
-                    // The infobase is about to change, and until the load is known to have gone
-                    // through, the old record describes nothing. Dropped now rather than after: a
-                    // process killed mid-load must not leave behind a record that looks valid.
-                    if (snapshot != null) {
-                        Files.deleteIfExists(snapshot);
-                    }
-
+                    // The old record stays until a new one replaces it. Should this load not go
+                    // through, the platform rolls it back and the record still describes the infobase;
+                    // should it go through and no new record follow - the process killed, the record
+                    // not writable - the load has moved the generation, and the old record no longer
+                    // matches. Deleting it up front bought nothing on top of that, and a lost
+                    // connection right after the deletion made the repeated attempt find no record.
+                    stage[0] = "loading";
                     long loadStarted = System.nanoTime();
                     List<com._1c.g5.designer.ssh.client.operation.ILoadIssue> issues = null;
                     if (plan.mode == LoadPlan.Mode.PARTIAL) {
@@ -1630,20 +1649,21 @@ public final class DesignerAgentGateway {
                             + agent.infobase
                             + (r.issues.isEmpty() ? "" : " with " + r.issues.size() + " issue(s)");
 
-                    // What the infobase holds now, and the generation the load left it at. Without the
-                    // record the next load is whole - slower, never wrong - but the caller is told.
+                    // What the infobase holds now, and the generation the load left it at. Without a
+                    // new record the next load is whole - slower, never wrong - but the caller is told.
                     if (snapshot != null) {
-                        r.generationAfter = generationId(session);
+                        stage[0] = "reading the generation the load left";
+                        r.generationAfter = generationIdAfter(session);
                         if (r.generationAfter == null) {
-                            r.loadRecordState += "; not kept after the load: the infobase's configuration "
-                                    + "generation is unknown, so the next load is whole";
+                            r.loadRecordState += "; not written after the load: the infobase's "
+                                    + "configuration generation could not be read, so the next load is whole";
                         } else {
                             export.generation = r.generationAfter;
                             try {
                                 export.write(snapshot);
                                 r.loadRecordState += "; kept after the load";
                             } catch (IOException notKept) {
-                                r.loadRecordState += "; NOT kept after the load ("
+                                r.loadRecordState += "; NOT written after the load ("
                                         + notKept.getClass().getSimpleName() + ": " + notKept.getMessage()
                                         + "), so the next load is whole";
                             }
@@ -1896,12 +1916,31 @@ public final class DesignerAgentGateway {
      * when it cannot be had. It is only ever compared for equality: the platform changes it on every
      * change of the configuration (Administrator guide 7.4.4, {@code /GetConfigGenerationID}). Null makes
      * the next plan a full load, which is the safe direction.
+     *
+     * <p>A lost infobase connection is thrown rather than turned into null. It is not an unknown
+     * generation: withSession reconnects and runs the operation again, and nothing gets decided on a
+     * guess in between. Read this way only BEFORE the work - see {@link #generationIdAfter}.
      */
-    private static String generationId(IDesignerSession session) {
+    private static String generationId(IDesignerSession session) throws Exception {
         try {
             String id = session.configure().retrieveGenerationId().exec(Duration.ofMinutes(5));
             return id == null || id.isBlank() ? null : id.trim();
-        } catch (Exception unknown) {
+        } catch (Exception failed) {
+            if (connectionLost(failed)) {
+                throw failed;
+            }
+            return null;
+        }
+    }
+
+    /**
+     * The generation once the work is done. Nothing is thrown from here: a repeat at this point would
+     * run the finished work a second time, while an unknown generation only makes the next load whole.
+     */
+    private static String generationIdAfter(IDesignerSession session) {
+        try {
+            return generationId(session);
+        } catch (Exception lost) {
             return null;
         }
     }

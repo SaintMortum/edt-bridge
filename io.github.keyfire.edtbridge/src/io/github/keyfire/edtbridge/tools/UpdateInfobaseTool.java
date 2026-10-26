@@ -281,6 +281,9 @@ public final class UpdateInfobaseTool {
                 o.addProperty("loadRecord", res.loadRecord);
                 o.addProperty("loadRecordState", res.loadRecordState);
             }
+            if (res.loadRepeated != null) {
+                o.addProperty("loadRepeated", res.loadRepeated);
+            }
             o.addProperty("databaseConfigUpdated", res.databaseConfigUpdated);
             if (res.question != null) {
                 o.addProperty("question", res.question);
