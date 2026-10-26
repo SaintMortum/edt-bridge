@@ -79,6 +79,10 @@ public final class UpdateInfobaseTool {
         props.add("updateDatabaseConfig", boolProp("agent transport: apply the database configuration "
                 + "after loading (default true). Off leaves the infobase holding new code and running "
                 + "the old one until edt_update_database_config is called."));
+        props.add("fullLoad", boolProp("agent transport: load the whole configuration even when only some "
+                + "files changed since this bridge's last load (default false). Without it the files "
+                + "that differ are loaded on their own whenever that is provably safe - the result's "
+                + "loadMode and loadReason say which happened and why."));
         props.add("answer", strProp("agent transport: which option to give when the platform stops and asks - the "
                 + "value it offered (or the label). Left out, the question comes back in \"question\" "
                 + "with its options and NOTHING is answered: one option ends other users' sessions "
@@ -114,7 +118,12 @@ public final class UpdateInfobaseTool {
                 + "That is the only way into a server infobase that has users, and it loads XML "
                 + "straight into the base - no throwaway base and no .cf in between, which matters for "
                 + "a large configuration. It then applies the database configuration unless "
-                + "updateDatabaseConfig=false.");
+                + "updateDatabaseConfig=false. The configuration is loaded file by file when that is "
+                + "provably safe: only the files that differ from this bridge's last load are sent, and "
+                + "anything that cannot be proven safe - no record of a last load, another platform, an "
+                + "infobase changed since by anyone else, a removed file, a changed Configuration.xml - "
+                + "loads it whole. loadMode (full, partial, skipped) and loadReason report the choice; "
+                + "fullLoad=true forces the whole. An extension is always loaded whole.");
         t.addProperty("descriptionRu",
                 "ЗАПИСЬ (Phase 2): обновить конфигурацию информационной базы ИЗ проекта EDT "
                 + "(конфигурация или расширение) штатным механизмом синхронизации (действие "
@@ -131,7 +140,12 @@ public final class UpdateInfobaseTool {
                 + "БАЗЫ. Только так доступна серверная база с пользователями, и XML грузится прямо в "
                 + "базу – без промежуточной базы и без .cf, что существенно для большой конфигурации. "
                 + "После загрузки применяется конфигурация базы данных, если не указано "
-                + "updateDatabaseConfig=false.");
+                + "updateDatabaseConfig=false. Конфигурация загружается по файлам, когда это доказуемо "
+                + "безопасно: отправляются только файлы, отличающиеся от прошлой загрузки этим мостом, а "
+                + "всё, что безопасным не доказано, - нет записи о прошлой загрузке, другая платформа, "
+                + "базу с тех пор менял кто-то ещё, файл исчез, изменился Configuration.xml - грузит её "
+                + "целиком. Выбор сообщают loadMode (full, partial, skipped) и loadReason; fullLoad=true "
+                + "требует полной загрузки. Расширение всегда загружается целиком.");
         t.add("inputSchema", schema);
         return t;
     }
@@ -215,6 +229,8 @@ public final class UpdateInfobaseTool {
                     getStr(args, "answer"),
                     !args.has("updateDatabaseConfig") || args.get("updateDatabaseConfig").isJsonNull()
                             || args.get("updateDatabaseConfig").getAsBoolean(),
+                    args.has("fullLoad") && !args.get("fullLoad").isJsonNull()
+                            && args.get("fullLoad").getAsBoolean(),
                     apply);
 
             JsonObject o = new JsonObject();
@@ -235,6 +251,31 @@ public final class UpdateInfobaseTool {
                 JsonArray issues = new JsonArray();
                 res.issues.forEach(issues::add);
                 o.add("issues", issues);
+            }
+            if (res.loadMode != null) {
+                o.addProperty("loadMode", res.loadMode);
+                o.addProperty("loadReason", res.loadReason);
+            }
+            if (res.totalFiles >= 0) {
+                o.addProperty("totalFiles", res.totalFiles);
+            }
+            if (res.changedFiles >= 0) {
+                o.addProperty("changedFiles", res.changedFiles);
+                JsonArray sample = new JsonArray();
+                res.changedSample.forEach(sample::add);
+                o.add("changedSample", sample);
+            }
+            if (res.exportMillis >= 0) {
+                o.addProperty("exportMillis", res.exportMillis);
+            }
+            if (res.loadMillis >= 0) {
+                o.addProperty("loadMillis", res.loadMillis);
+            }
+            if (res.generationBefore != null) {
+                o.addProperty("generationBefore", res.generationBefore);
+            }
+            if (res.generationAfter != null) {
+                o.addProperty("generationAfter", res.generationAfter);
             }
             o.addProperty("databaseConfigUpdated", res.databaseConfigUpdated);
             if (res.question != null) {
