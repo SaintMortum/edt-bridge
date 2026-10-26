@@ -1412,6 +1412,13 @@ public final class DesignerAgentGateway {
         /** The infobase's configuration generation id before and after the load, when known. */
         public String generationBefore;
         public String generationAfter;
+        /**
+         * Where the record of the last load is kept, and what became of it in this call: found or not
+         * before the load, kept or not after it. A record that silently fails to be kept turns every
+         * later load into a full one with nothing saying why.
+         */
+        public String loadRecord;
+        public String loadRecordState;
     }
 
     /** How many of the files a partial load sent are named in its result. */
@@ -1502,6 +1509,8 @@ public final class DesignerAgentGateway {
                 r.loadReason = null;
                 r.changedFiles = -1;
                 r.changedSample.clear();
+                r.loadRecord = null;
+                r.loadRecordState = null;
                 // The agent gives each SSH user a subdirectory of its own inside /AgentBaseDir, and
                 // only the platform knows the layout - it asks the agent for its version and reads
                 // agentbasedir.json. Note the overload: the first argument of the two-argument form
@@ -1547,13 +1556,23 @@ public final class DesignerAgentGateway {
                         plan = LoadPlan.full("the workspace has no state location to keep the record of a "
                                 + "load in", export.files.size());
                     } else {
+                        r.loadRecord = snapshot.toString();
                         r.generationBefore = generationId(session);
-                        plan = LoadPlan.decide(LoadSnapshot.read(snapshot), export, r.generationBefore,
-                                fullLoad);
+                        boolean present = Files.isRegularFile(snapshot);
+                        LoadSnapshot previous = present ? LoadSnapshot.read(snapshot) : null;
+                        if (present && previous == null) {
+                            r.loadRecordState = "unreadable before the load";
+                            plan = LoadPlan.full("the record of the earlier load is there but cannot be read "
+                                    + "as one", export.files.size());
+                        } else {
+                            r.loadRecordState = present ? "read before the load" : "none before the load";
+                            plan = LoadPlan.decide(previous, export, r.generationBefore, fullLoad);
+                        }
                     }
                     r.totalFiles = plan.total;
                     r.loadReason = plan.reason;
                     if (plan.mode == LoadPlan.Mode.SKIP) {
+                        r.loadRecordState += "; nothing was loaded, so it stands as it was";
                         r.loadMode = "skipped";
                         r.issues.clear();
                         r.ok = true;
@@ -1611,15 +1630,22 @@ public final class DesignerAgentGateway {
                             + agent.infobase
                             + (r.issues.isEmpty() ? "" : " with " + r.issues.size() + " issue(s)");
 
-                    // What the infobase holds now, and the generation the load left it at.
+                    // What the infobase holds now, and the generation the load left it at. Without the
+                    // record the next load is whole - slower, never wrong - but the caller is told.
                     if (snapshot != null) {
                         r.generationAfter = generationId(session);
-                        if (r.generationAfter != null) {
+                        if (r.generationAfter == null) {
+                            r.loadRecordState += "; not kept after the load: the infobase's configuration "
+                                    + "generation is unknown, so the next load is whole";
+                        } else {
                             export.generation = r.generationAfter;
                             try {
                                 export.write(snapshot);
+                                r.loadRecordState += "; kept after the load";
                             } catch (IOException notKept) {
-                                // Without the record the next load is whole: slower, never wrong.
+                                r.loadRecordState += "; NOT kept after the load ("
+                                        + notKept.getClass().getSimpleName() + ": " + notKept.getMessage()
+                                        + "), so the next load is whole";
                             }
                         }
                     }

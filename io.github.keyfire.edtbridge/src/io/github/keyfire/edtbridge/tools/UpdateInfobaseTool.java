@@ -277,6 +277,10 @@ public final class UpdateInfobaseTool {
             if (res.generationAfter != null) {
                 o.addProperty("generationAfter", res.generationAfter);
             }
+            if (res.loadRecord != null) {
+                o.addProperty("loadRecord", res.loadRecord);
+                o.addProperty("loadRecordState", res.loadRecordState);
+            }
             o.addProperty("databaseConfigUpdated", res.databaseConfigUpdated);
             if (res.question != null) {
                 o.addProperty("question", res.question);
