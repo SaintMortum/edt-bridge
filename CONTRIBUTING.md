@@ -47,13 +47,13 @@ See [Manual install](README.md#manual-install-without-the-wrapper).
 
 ## Verifying a change
 
-There is no offline unit suite for the Java plugin. It is verified against a **live EDT**: build,
+There is no complete offline test suite for the Java plugin. Verify it against a running EDT: build,
 deploy to `dropins/`, restart EDT, and exercise the tools you touched, either from the page in the
 browser or from an MCP client. For write tools, check the plan with `apply=false` before running
 `apply=true`. A hosted runner can do none of this, because compiling the bundle needs the proprietary
 1C:EDT SDK bundles. That is also why the jar is built locally and committed under `dist/`.
 
-The Python wrapper is a different matter. It has no EDT dependency, so it carries a pytest suite:
+The Python wrapper is a different matter. It has no EDT dependency, so it has a pytest suite:
 
 ```sh
 cd python
@@ -63,102 +63,98 @@ python -m pytest -q
 
 The `ci` workflow runs that suite on every push and pull request, on Linux and Windows, on 3.10 and
 3.12. Both release workflows call `ci` first, so a red suite stops a release instead of shipping past
-it. Windows is in the matrix for a reason: the one release that shipped broken did so because of an
-encoding fault that only appears there.
+it. The matrix includes Windows because an encoding fault specific to that system caused a broken
+release.
 
 New wrapper behaviour is expected to arrive with a test, and a fixed bug with the test that
 reproduces it. The current suite is largely made of exactly those.
 
 Part of the plugin is testable as well. Everything under `...edtbridge.core` is pure string work –
-where an object's sources live, whether a validation problem belongs to what was asked about – and it
+where an object's sources are located, whether a validation problem belongs to the requested scope – and it
 is kept free of EDT and Eclipse types on purpose, so a plain JDK compiles it:
 
 ```sh
 scripts/test-java.sh
 ```
 
-That script puts nothing but JUnit on the classpath. A dependency on the SDK creeping into `core`
-therefore fails the build instead of quietly making the suite unrunnable. Logic that needs the live
-model belongs in the gateways under `...edtbridge.edt` and is verified against a real EDT, as above.
+The script adds only JUnit to the classpath, so an SDK dependency in `core` fails the build. Logic
+that requires the live model remains in the gateways under `...edtbridge.edt` and is verified
+against a running EDT, as described above.
 
 ### Documentation
 
-`python scripts/check_docs.py` reads the pages against the sources. Every tool and every
-`EDT_BRIDGE_` variable has to have a row, the blocks mirrored into the READMEs have to match the
-page they came from, and every image has to be in the repository. The wrapper suite runs the same
-script, so a page that has drifted fails `ci` along with the tests.
+`python scripts/check_docs.py` compares documentation with the sources. Every tool and every
+`EDT_BRIDGE_` variable must be documented. Sections mirrored into the READMEs must match their
+source pages, and image files must be in the repository. The wrapper test suite runs the same check
+in `ci`.
 
-The Russian pages are read for their wording too. The dictionary of transliterated words lives in
-the shared [docsguard](https://github.com/keyfire/docsguard), and each finding comes with the
-Russian word to write instead. A word quoted as a word goes in backticks, the way a changelog entry
-says which transliteration was replaced; the check reads backticks as a name and walks past them.
+The Russian texts are checked against a transliteration dictionary from
+[docsguard](https://github.com/keyfire/docsguard). Each finding includes a suggested Russian
+replacement. Put a word in backticks when quoting it as a word, for example when a changelog entry
+names a replaced transliteration.
 
-The same dictionary reads the Russian strings of `python/src/edt_bridge_mcp/i18n.py`. That is the
-message catalog every line of `--help` comes from. A file named there and missing is a finding of
-its own: otherwise a renamed catalog would leave the check reading nothing and passing.
+The same dictionary checks the Russian strings in `python/src/edt_bridge_mcp/i18n.py`, the message
+catalog used to generate `--help`. A missing named file is reported as an error so that a renamed
+catalog cannot make the check pass without reading any text.
 
-`docs/changelog*.md` and `docs/onboarding*.md` are mirrors of the root documents. Rebuild them with
-`node scripts/sync-docs.mjs` and edit the source instead.
+`docs/changelog*.md` and `docs/onboarding*.md` are generated from their source documents by
+`node scripts/sync-docs.mjs`. Edit the source documents.
 
 ### Starting a process
 
-A process started from the wrapper or from a script is read as text, and the text is decoded
-explicitly: `capture_output=True, text=True, encoding="utf-8"`, plus `errors="replace"` wherever the
-output goes to a human. Without `encoding` Python decodes with the code page of the machine, and the
-failure is silent in the worst way. The output comes back as replacement characters, or the decode
-raises inside the reader thread and leaves the output empty, while the exit code goes on saying the
-run went well. That is how the guard which refuses a headless start while a GUI EDT holds the
-workspace came to never fire. A call that asks for no text at all decodes nothing and needs neither
-setting: bytes in, bytes out, decoded by hand afterwards, the way the `tasklist` lookup does it.
+When reading text output from a process started by the wrapper or a script, specify the encoding:
+`capture_output=True, text=True, encoding="utf-8"`. Also use `errors="replace"` for output intended
+for a person. Without `encoding`, Python uses the machine's code page. A decoding error may produce
+replacement characters or leave output empty after an exception in the reader thread, while the
+process exit code still indicates success. This prevented the check that blocks a headless start
+when a GUI EDT holds the workspace from detecting the running process.
 
-A process started from the wrapper also names its stdin: `stdin=subprocess.DEVNULL`. The
-wrapper is itself an MCP server, so its stdin is the pipe the client speaks over, and on Windows
-a child that inherits the handle never reaches its own exit. The work takes milliseconds, the
-parent waits out the whole timeout, and nothing is printed while it waits. Whether that hurts
-depends on the command: `tasklist`, `powershell` and `cmd` close their end and leave, while git,
-an interpreter and pip stay, and pip is what the plugin self-update runs. Nothing here ever
-writes to a child, so an empty stdin costs nothing. A call that does feed one, through `input=`
-or an `stdin=` of its own, is left alone.
+When text mode is not required, pass and receive bytes and decode them separately. The `tasklist`
+lookup uses this approach.
 
-`python/tests/test_conventions.py` fails on a process read as text without an encoding, the
-`(run or subprocess.run)(...)` shape of a runner seam included, which is the shape a search for the
-text of a call looks straight past. The reading itself comes from the shared
-[docsguard](https://github.com/keyfire/docsguard) package, pinned to a tag by the `ci` workflow. What
-stays here is the list of folders. The stdin half is judged over `python/src` alone: a generator
-and a test run from a console, and a console stdin is safe to hand on.
+Set `stdin=subprocess.DEVNULL` for a child process started by the wrapper. The wrapper runs as an
+MCP server and uses stdin to communicate with the client. On Windows, a child that inherits this
+channel can remain running until the timeout, even when its work takes milliseconds. `tasklist`,
+`powershell` and `cmd` close their end of the channel and exit. Git, an interpreter and pip may
+remain running; pip is used to update plugins. The wrapper does not send input to these child
+processes. The check allows calls that pass data through `input=` or provide their own `stdin=`.
+
+`python/tests/test_conventions.py` checks that an encoding is specified when process output is read
+as text. It also checks calls shaped like `(run or subprocess.run)(...)`, which a text search can
+miss. The analysis is provided by [docsguard](https://github.com/keyfire/docsguard), installed by
+the `ci` workflow from a tag. The project supplies the list of directories. The stdin rule covers
+only `python/src`: generators and tests run from a console and can pass console stdin to a child.
 
 ### Writing a file
 
-A text file written from the wrapper or from a script names its line ending: `write_text(text,
-encoding="utf-8", newline="")`. Text mode otherwise translates every line feed into the platform's
-ending, and a generator run on Windows hands back a page with every line changed. A checkout with
-`core.autocrlf=input` normalizes that away on commit, which is what makes it easy to miss.
+Specify encoding and line endings when writing a text file from the wrapper or a script:
+`write_text(text,
+encoding="utf-8", newline="")`. Without `newline=""`, text mode translates line feeds to the
+platform's line ending. A generator on Windows can therefore change every line in a page. A checkout
+with `core.autocrlf=input` normalizes the change on commit, so it can be missed.
 
-The batch file of the Windows auto-start was caught by the same rule from the other side. Its lines
-are joined with CRLF because that is what a batch file wants, text mode translated each of those a
-second time, and every line went to disk as `\r\r\n`.
+The Windows auto-start batch file already joins lines with CRLF. If text mode translates those line
+feeds again, the file contains `\r\r\n`.
 
-`python/tests/test_conventions.py` fails on a write that leaves the line ending to the platform. It
-reads `python/src` and `scripts` and not the tests: a test writes into a temporary directory that is
-gone when the run ends, and a fixture carrying the other line ending on purpose is a test in its own
-right.
+`python/tests/test_conventions.py` checks that line endings are specified. It covers `python/src`
+and `scripts`, but not tests. Tests write to temporary directories, and a fixture with a different
+line ending is tested separately.
 
-`newline=""` covers half of it, because it says how a file is written. A file read with carriage
-returns already in it carries them onward, and `scripts/sync-docs.mjs` splices the tool catalogue of
-a page into both READMEs by copying bytes. The other half is `.gitattributes`. The line `* text=auto
-eol=lf` stores and checks out every text file with line feeds, whatever the machine is set to.
-`core.autocrlf=input` says the same thing about the machine, so it holds only until the first
-checkout made without it.
+`newline=""` controls writing. If a file is read with carriage returns still present,
+`scripts/sync-docs.mjs` can copy them into both READMEs when inserting the tool catalogue. The
+`.gitattributes` line `* text=auto
+eol=lf` specifies line feeds for text files regardless of the machine's settings. The
+`core.autocrlf=input` setting applies only to the checkout where it is configured.
 
 ### Naming a test
 
-A test named like an existing one takes its place. Python keeps the last definition, pytest collects
-what the module ended up with, and the number of tests goes up, because the newcomer was added.
-Nothing in the run says the older test is gone.
+When two tests in the same namespace have the same name, Python keeps the last definition. Pytest
+collects the last version, and the test count can still increase if other tests are added. The test
+report does not indicate that the earlier definition was replaced.
 
-`python/tests/test_conventions.py` runs `shadowed_test_problems` over `python/tests`, and the
-finding names the line of the newcomer, which is the definition to rename. Each namespace is judged
-on its own, so two classes are still allowed a method of the same name.
+`python/tests/test_conventions.py` runs `shadowed_test_problems` over `python/tests` and reports
+the line of the duplicate definition to rename. Namespaces are checked separately, so methods in
+different classes can have the same name.
 
 ## Code style
 

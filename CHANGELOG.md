@@ -43,7 +43,7 @@ to the code and the reasoning behind it.
 - **A child process of the wrapper no longer inherits the stdin the MCP client speaks over.** On
   Windows a child holding that handle never reaches its own exit. Whether that hurts depends on
   the command. `tasklist`, `powershell` and `taskkill` close their end and leave, so the process
-  lookup was never affected; pip stays, and pip is what the plugin self-update runs. Inside a live
+  lookup was unaffected, but pip did not exit during plugin self-update. Inside a live
   server `pip --version` answered in 0.3 seconds with an empty stdin and hung to the timeout
   without one. Six process starts in `python/src` pass `stdin=subprocess.DEVNULL` now.
   ([#19](https://github.com/keyfire/edt-bridge/pull/19))
@@ -51,14 +51,13 @@ to the code and the reasoning behind it.
 ## 2026-09-12 – 0.27.1
 
 ### Added
-- **`python/tests/test_conventions.py` catches a test shadowed by a namesake.** A test that arrives
-  under the name of an existing one takes its place: Python keeps the last definition, and the
-  number of tests goes up, because the newcomer was added. The check reads `python/tests` and names
-  the line of the newcomer, which is the definition to rename. It comes from the shared
-  [docsguard](https://github.com/keyfire/docsguard).
+- **`python/tests/test_conventions.py` detects a test shadowed by another test with the same name.**
+  Python keeps the last definition, so a new test can replace an existing one. The total test count
+  can still rise when other tests are added. The [docsguard](https://github.com/keyfire/docsguard)
+  check scans `python/tests` and reports the line of the new definition to rename.
   ([#18](https://github.com/keyfire/edt-bridge/pull/18))
 - **`scripts/changelog-link.py` writes a pull request link into both changelog editions.** It takes
-  the number, links every entry of the topmost section that carries none, moves the link to a
+  the number, links every entry of the topmost section that lacks a link, moves the link to a
   continuation line where the entry already fills the width, and rebuilds the mirrored pages.
   Writing that by hand into two files is how one of them ends up wrong.
   ([#17](https://github.com/keyfire/edt-bridge/pull/17))
@@ -89,23 +88,20 @@ to the code and the reasoning behind it.
   file as `utf-8-sig`. Editors on Windows write a byte-order mark without being asked, `ast`
   answered it with a `SyntaxError`, and one such file took down the findings from every other file
   with it. ([#18](https://github.com/keyfire/edt-bridge/pull/18))
-- **The two coverage checks of `scripts/check_docs.py` come from the shared guard.** They wrote the
-  set difference out by hand, once each, and the environment copy had already lost the empty-reader
-  guard the tools copy had. `coverage_problems` judges both directions and a reader that has gone
-  quiet. ([#17](https://github.com/keyfire/edt-bridge/pull/17))
-- **The variable reader also sees a name bound to a constant.** `EDT_BRIDGE_LANG` and
-  `EDT_BRIDGE_PLUGIN_INDEX` are read through one, so the check had been passing them for free, and
-  the installation page could have dropped either without a word. With them visible, the page is
-  judged in the other direction too: a variable described there and gone from the code sends a
-  reader after a knob that does nothing. ([#17](https://github.com/keyfire/edt-bridge/pull/17))
-- **`ci` installs `docsguard@v0.8.0` instead of `v0.7.1`.** That version reads the string literals
-  of the sources, and that is what the version went up for. The dictionary also gained six words:
+- **The two coverage checks in `scripts/check_docs.py` use the shared guard.** Previously each
+  check computed its own set difference. The environment-variable check had already lost the empty
+  extraction check present in the tool check. `coverage_problems` checks differences in both
+  directions and an empty extraction. ([#17](https://github.com/keyfire/edt-bridge/pull/17))
+- **The environment-variable check includes names bound to constants.** This covers
+  `EDT_BRIDGE_LANG` and `EDT_BRIDGE_PLUGIN_INDEX`, which the check previously missed. It also checks
+  the reverse: a variable described on the installation page must exist in the code.
+  ([#17](https://github.com/keyfire/edt-bridge/pull/17))
+- **`ci` installs `docsguard@v0.8.0` instead of `v0.7.1`.** That version checks string literals in the sources. The dictionary also gained six words:
   `дашборд`, `бэкенд`, `лаунчер`, `мейнтейнер`, `топ-объект`, `легаси`.
   ([#15](https://github.com/keyfire/edt-bridge/pull/15))
-- **`ci` installs `docsguard@v0.7.1` instead of `v0.4.0`.** The jargon dictionary arrived in that
-  version, and that is why the version went up.
+- **`ci` installs `docsguard@v0.7.1` instead of `v0.4.0`.** That version added the jargon dictionary.
   ([#14](https://github.com/keyfire/edt-bridge/pull/14))
-- **The Russian help now says `рабочая область` instead of the transliterated `воркспейс`.** It
+- **The Russian help uses `рабочая область` instead of the transliterated `воркспейс`.** It
   covers `--workspace` and the description of the `gui` command. A person reads that text in a
   terminal, which is no place for a transliteration.
   ([#13](https://github.com/keyfire/edt-bridge/pull/13))
@@ -119,10 +115,10 @@ to the code and the reasoning behind it.
   its own. ([#11](https://github.com/keyfire/edt-bridge/pull/11))
 
 ### Fixed
-- **`.gitattributes` holds the line ending for the whole repository.** The line `* text=auto eol=lf`
-  stores and checks out every text file with line feeds, whatever the machine is set to.
-  `newline=""` in the Python generators stops short of that: it says how a file is written, while
-  `scripts/sync-docs.mjs` splices the tool catalogue of a page into both READMEs by copying bytes.
+- **`.gitattributes` specifies line endings for the repository.** The `* text=auto eol=lf` line
+  stores and checks out text files with LF regardless of the machine's settings. The `newline=""`
+  option in Python generators controls writing, but does not remove carriage returns that
+  `scripts/sync-docs.mjs` can copy from the tool catalogue page into both READMEs.
   ([#18](https://github.com/keyfire/edt-bridge/pull/18))
 - **The batch file of the Windows auto-start gets one carriage return per line.** Its lines are
   joined with CRLF, and `write_text` in text mode translated each of those again, so every line went
@@ -140,82 +136,76 @@ to the code and the reasoning behind it.
 ## 2026-09-11 – 0.27.0
 
 ### Fixed
-- **A stop no longer spends a minute and a half being polite to an agent that cannot answer.**
-  Politeness pays: a killed agent leaves a Designer session holding the infobase lock. But the
-  request needs a live SSH session, and an agent without one took the full reconnect loop. Measured
-  before and after: 35.6 s, then 0.1 s. ([#8](https://github.com/keyfire/edt-bridge/pull/8))
-- **Stopping a dead agent clears what it left behind.** An agent whose process is gone is dropped
-  from the registry, so `stop` answered "no agent is running for X" while the directory naming its
-  Designer session stayed on disk, holding the infobase lock. `stop` now ends that session, removes
-  the directory and says what it did. ([#9](https://github.com/keyfire/edt-bridge/pull/9))
+- **Stopping an unavailable agent no longer waits for SSH reconnection.** A forcibly terminated
+  agent can leave a Designer session holding the infobase lock. A graceful stop needs an active
+  SSH session. Previously, a lost session caused a full reconnection cycle. The measured stop time
+  fell from 35.6 to 0.1 seconds. ([#8](https://github.com/keyfire/edt-bridge/pull/8))
+- **Stopping a terminated agent closes its session and removes its directory.** Previously, an
+  agent whose process had exited was removed from the registry. `stop` returned "no agent is running for X".
+  The directory recording its Designer session remained on disk, and the session
+  held the infobase lock. `stop` now ends the session, removes the directory, and reports the
+  result. ([#9](https://github.com/keyfire/edt-bridge/pull/9))
 
 ## 2026-09-10 – 0.26.0
 
 ### Fixed
-- **An agent already running is no longer served for a different infobase user.** Credentials bind
-  to the agent when it starts and the SSH session uses those, so `infobaseUser` passed to a later
-  call reached nothing: the work was done as whoever the agent was started as, and when it had been
-  started without a user at all the call died with a bare `Auth fail` naming neither user nor cause.
-  A call asking for another user is now refused, saying which identity is running and how to change
-  it; asking for nobody in particular still takes whatever runs, as nearly every call does. The
-  authentication failure itself carries the missing fact as a hint - unless the agent's log
-  already named the configuration lock as the reason, where credentials are not the story. ([#4](https://github.com/keyfire/edt-bridge/pull/4))
+- **A running agent does not execute a call for a different infobase user.** Credentials are
+  bound to the agent at startup and used by its SSH session. Previously, `infobaseUser` on later
+  calls was ignored. The call ran as the agent's user, or failed with `Auth fail` without identifying
+  the user or cause if the agent had started without one. A request for another user is now refused
+  with the active identity and instructions for changing it. A call without a specified user still
+  uses the running agent. Authentication failures also include a hint unless the agent log identifies
+  the configuration lock as the cause. ([#4](https://github.com/keyfire/edt-bridge/pull/4))
 - **`transport=agent` substitutes the project's associated infobase.** `infobase` is documented as
   optional and the EDT synchronization route has always filled it in from the project, but the agent
   route answered a well-formed call with "an infobase name, uuid or address is required". ([#4](https://github.com/keyfire/edt-bridge/pull/4))
-- **Stopping an agent no longer leaves its directory behind.** An agent whose SSH session the
-  platform had torn down – the infobase refuses the configuration lock, and the refusal arrives as a
-  disconnect – was killed on `stop`, and its base directory was removed in the same breath: the
-  record file went, the `agent.log` the dying process still held did not, and `%TEMP%` kept an
-  `edtbridge-agent-*` directory with a 0-byte log and nothing left in it to say whose it was.
-  Measured on the same infobase: the record was deleted while the process was still alive, and the
-  process disappeared 150 ms later – a race a single delete cannot win. A killed agent is now waited
-  out before its trace is touched, and the removal retries for up to five seconds instead of trying
-  once. Verified by repeating the scene: the directory is gone by the time the stop returns. ([`1795fc6`](https://github.com/keyfire/edt-bridge/commit/1795fc6))
-- **A listing no longer calls the bridge's own leftovers somebody else's.** Every leftover directory
-  was reported as "left over from an earlier bridge process", which reads as a crash that happened
-  before this run and sends the reader to tidy up after somebody else. A directory THIS process
-  created and could not remove means the opposite: a stop that did not finish here, and an agent
-  that may still hold a Designer session on the infobase's configuration lock. The bridge remembers
-  the directories it created, so a leftover now says which it is (`origin` in the answer), and the
-  two kinds are counted apart in the message. ([`1795fc6`](https://github.com/keyfire/edt-bridge/commit/1795fc6))
-- **The platform's questions are answered - by the caller.** The bridge registered no question
-  handler, so when the platform stopped to ask ("the database is locked: Cancel / Retry", and for a
-  change touching no table structure a third option, applying it dynamically while sessions keep
-  running), the operation died with "question delegate has not been specified" - identically under
-  every `sessionTermination`, because that setting feeds a different branch. Dynamic update was
-  unreachable and a code-only change needed a maintenance window. A handler is now set on every
-  session: without `answer` the question comes back with its options and nothing is answered, and
-  `answer=<value>` picks one. The bridge does not choose: one option ends other users' sessions. ([#6](https://github.com/keyfire/edt-bridge/pull/6))
-- **A question that WAS answered is no longer reported as an answer that was not offered.** When the
-  platform asked, the answer reached it and the operation failed anyway, the refusal claimed the
-  chosen option had not been among the offered ones - sending the reader after a typo in an answer
-  the platform had accepted, and hiding the platform's own error. The two cases are now told apart,
-  and the second names the real failure. Where `sessionTermination` is chosen it now says what this
-  case taught: on a lively infobase `force` cannot settle it, because background jobs respawn within
-  a minute and take the lock back - a maintenance window (`edt_infobase_maintenance`) is what works. ([#6](https://github.com/keyfire/edt-bridge/pull/6))
-- **`edt_infobase_config_state` no longer reports "up to date" from structure changes alone.** A
-  change that alters no table reports no structure changes, so an empty list said the database
-  configuration was applied while sessions still ran the old code. The answer now says what was
-  actually measured. ([#6](https://github.com/keyfire/edt-bridge/pull/6))
-- **The dashboard runs tools again on a bridge that requires a token.** The tool list was fetched
-  once at page load - before a token could be typed - and the 401 that came back was turned into an
-  empty list without a word, so the capabilities section held nothing but "Expand all" / "Collapse
-  all" and those buttons had nothing to expand. Typing the token only set a variable, and reloading
-  the page started from the same place, which left the runner unusable whenever a token was
-  configured. The token field now reloads the list, and an HTTP refusal is reported as a refusal
-  instead of passing for an empty answer. ([#5](https://github.com/keyfire/edt-bridge/pull/5))
+- **Stopping an agent removes its directory after the process exits.** When the platform disconnected
+  SSH because it could not acquire the configuration lock, `stop` terminated the agent and removed
+  its directory immediately. The process still held `agent.log`, leaving an `edtbridge-agent-*`
+  directory in `%TEMP%` with an empty log and no ownership record. In one measurement, the process
+  exited 150 ms after the record was removed. `stop` now waits for the process and retries removal
+  for up to five seconds. On repetition, the directory was gone when stop returned.
+  ([`1795fc6`](https://github.com/keyfire/edt-bridge/commit/1795fc6))
+- **The agent listing distinguishes directories left by the current and previous bridge processes.**
+  Previously, every directory was reported as "left over from an earlier bridge process". A directory
+  created by the current process and not removed at stop can indicate that its agent still holds a
+  Designer session and the infobase configuration lock. The bridge tracks directories it creates.
+  The response identifies their origin in `origin` and counts the two categories separately.
+  ([`1795fc6`](https://github.com/keyfire/edt-bridge/commit/1795fc6))
+- **The caller supplies answers to platform questions.** Previously, no question handler was
+  registered. For example, a locked infobase could prompt for cancellation or retry; for a change
+  without table structure changes, it could also offer a dynamic update while sessions continued.
+  The operation failed with "question delegate has not been specified" under every
+  `sessionTermination` value, which controls a different branch. Dynamic updates were unavailable,
+  and a code-only change required a maintenance window. A handler is now registered for every
+  session. Without `answer`, the question and options are returned without an answer;
+  `answer=<value>` selects an option. The bridge does not select one automatically because an option
+  can terminate other users' sessions. ([#6](https://github.com/keyfire/edt-bridge/pull/6))
+- **Errors after answering a platform question are distinguished from invalid answer choices.**
+  Previously, an operation could fail after accepting an answer and report that the choice was not
+  offered, hiding the platform error. The messages now distinguish these cases and identify the
+  cause. The `sessionTermination` description also explains that `force` cannot resolve the lock
+  when background jobs reconnect within a minute; use a maintenance window
+  (`edt_infobase_maintenance`) in that case. ([#6](https://github.com/keyfire/edt-bridge/pull/6))
+- **`edt_infobase_config_state` does not treat an empty structure-change list as proof that the
+  database configuration is applied.** A change without table changes produces an empty list even
+  when sessions still run old code. The response reports only the confirmed state.
+  ([#6](https://github.com/keyfire/edt-bridge/pull/6))
+- **The status page runs tools when a token is configured.** Previously, the tool list was requested
+  at page load before a token could be entered. A 401 response became an empty list without a
+  message, leaving only the "Expand all" and "Collapse all" buttons. Entering a token saved its
+  value without requesting the list again, so tools could not be run. The list is now requested
+  again after token entry, and HTTP failures are reported separately.
+  ([#5](https://github.com/keyfire/edt-bridge/pull/5))
 
 ## 2026-09-09 – 0.23.0, 0.24.0, 0.25.0
 
 ### Added
-- **`status` names the jar lying in dropins next to the version answering.** A headless session
-  that started before the jar was replaced keeps running the old code, and nothing said so:
-  `/status` answered 0.21.0 while 0.22.0 lay in dropins, and the session went on believing the new
-  tools were there - the bridge cannot see what replaced its own file, so the wrapper reads it.
-  The answer carries `jarOnDisk` (version, path and `current`), and when the two differ the run
-  says in words that EDT has to be restarted. `self-update` names both versions for the same
-  reason.
+- **`status` reports the jar version in dropins alongside the running bridge version.** A headless
+  EDT started before the jar was replaced continues to run the previous code. For example,
+  `/status` returned 0.21.0 when dropins already contained 0.22.0. The wrapper reads the jar from
+  disk and returns `jarOnDisk` with its version, path, and `current` flag. When versions differ,
+  the command reports that EDT must be restarted. `self-update` also reports both versions.
 
 ### Fixed
 - **A slow tool no longer holds the requests behind it.** The wrapper read one frame from stdin,
@@ -228,49 +218,47 @@ to the code and the reasoning behind it.
   and `ping` in 0.30 s, both of them behind it in the stream.
 - **The shared options are accepted before the command, as the help promises.**
   `edt-bridge-mcp --port 8770 status` answered "unrecognized arguments: status" - the command was
-  looked for in the first position only, while the help says the connection options belong to the
+  looked for in the first position only, while the help states that the connection options belong to the
   server mode and to every command, which reads as "in any order". The command is now found
   wherever it stands; an option that takes a value is skipped together with its value, so a port
   number is never mistaken for a command name.
 
 ### Fixed
-- **Narrowing to a form named `Форма` no longer answers for the object's other forms.** An EDT check
-  marker names its object by presentation ("ВнешняяОбработка.Проба.Форма.Контроль.Форма.Модуль"), and
-  the narrowing demanded the object name and the form name as whole segments in any position. For the
-  platform's DEFAULT form name that is every sibling's presentation: the form word itself answers to
-  the name. Measured live: a processor with the forms `Форма` and `Контроль`, one error planted in
-  each, returned 7 of the 8 problems for `...Form.Форма`, four of them belonging to `Контроль`. The
-  segments are now required side by side and in order - object, the word for a form, the form's name -
-  with the word matched in either language and in the plural a path uses.
-- **A running agent of the requested LINE is no longer turned away.** Reuse measured the agent
-  against the newest build installed of that line, so a stand pinned to 8.5.1.1302 with 8.5.1.1464
-  also on disk refused its own agent for a request for `8.5.1` – and the refusal advised a restart
-  first, which would have started 8.5.1.1464, the one build that stand's server rejects. A line is
-  now served by any build of that line, a build still only by itself, and every refusal that remains
-  is one where a restart really does produce something else; the message says which build that is.
-  The reuse path also stops walking the install roots: an agent that already serves is answered
-  without touching the disk.
-- **The install roots are walked once per call.** `rac`, `ibcmd` and the configurator agent each
-  scanned twice on a miss – once to pick nothing, once to name what IS installed for the refusal –
-  and the agent scanned even when reusing a live one. The scan is taken once and both questions are
-  asked of it.
-- **`edt_infobase_maintenance action=end` lowers `sessions-deny` as well.** It came down only when
-  the `end` call was told `sessionsDeny` again – yet `end` is the other half of a `begin` made in
-  another call, and nothing carries that call's arguments across. A plain `end` reported "denial
-  flags lowered" over a stand that stayed shut to everybody, and the only field saying otherwise was
-  `flags`. `end` now takes down every flag a `begin` can put up, and when one survives anyway the
-  report says so instead of summarising it away.
-- **An SSH login refused because the infobase is held elsewhere says so.** The login authenticates an
-  INFOBASE user, so an agent that never opened the infobase has nobody to check it against and
-  answers "Auth fail" – a message about credentials for a failure that is not about them. With
-  another configurator holding the configuration lock, `edt_update_infobase transport=agent` failed
-  as a bare `AuthenticationException` while the platform's own explanation sat in the agent's `/Out`
-  log, unread. The log is now read on a refused login, the lock refusal in it is named for what it
-  is, and the thick-client processes running beside us are listed – one of them holds it.
-- **An `fqn` narrowing by FORM no longer answers with the object's other forms.** An EDT check marker
-  is addressed by object presentation, and the name filter knew the object's name alone, so "is the
-  form Контроль clean" came back with the findings of the form Форма – a report about the wrong code
-  that reads exactly like a report about the right one. A form is matched by both names at once.
+- **A filter for a form named `Форма` excludes findings from other forms of the object.** An EDT
+  marker uses an object presentation (`ВнешняяОбработка.Проба.Форма.Контроль.Форма.Модуль`).
+  Previously, the filter matched the object and form names as segments in any position, so the
+  form word also matched a sibling form. In a test with forms `Форма` and `Контроль` and one
+  error in each, `...Form.Форма` returned 7 of 8 findings, including four from `Контроль`. The
+  object, form type and form name segments must now appear consecutively and in order. The form
+  type is recognized in both languages, including the plural used in paths.
+
+- **A running agent from the requested version line can be reused.** Previously, reuse compared
+  the agent against the newest installed build of that line. A server on 8.5.1.1302 with
+  8.5.1.1464 installed rejected its own agent for `8.5.1` and suggested a restart on the
+  incompatible build. A line now accepts any build in that line; a specific build accepts only
+  itself. Remaining errors identify the build a restart would select. Reuse of a suitable agent
+  no longer scans installation directories.
+
+- **Installation directories are scanned once per call.** Previously, if no suitable installation
+  was found, `rac`, `ibcmd` and the configurator agent scanned twice: to select a build and to list
+  installed versions in the error. The agent also scanned when reusing a running agent. Both
+  results now use one scan.
+
+- **`edt_infobase_maintenance action=end` clears `sessions-deny`.** Previously the flag was
+  cleared only if `sessionsDeny` was passed again to `end`. Arguments from the separate `begin`
+  call are not retained. `end` reported "denial flags lowered" while access remained denied; the
+  actual state was available in `flags`. `end` now clears the flags that `begin` can set and
+  reports any flag that remains set.
+- **An SSH login error reports an infobase lock.** When another configurator held the configuration
+  lock, `edt_update_infobase transport=agent` returned `AuthenticationException` and "Auth fail"
+  even though the cause was unrelated to credentials. The platform's explanation remained in the
+  agent's `/Out` log. A refused login now checks the log, reports the lock and lists running
+  thick-client processes.
+
+- **An `fqn` form filter excludes other forms of the object.** Previously, the filter used only
+  the object name, so a request for form Контроль also returned findings for form Форма. The
+  filter now matches both the object and form names.
+
 - **`self-update` tells a failed add-on from a failed update.** The jar and the wrapper reaching
   0.22.0 while the plugin step failed on an unreachable source exited 1, exactly like a run that
   updated nothing: the exit code could not answer the question a caller has. It now separates them –
@@ -292,63 +280,59 @@ to the code and the reasoning behind it.
 ## 2026-09-06 – 0.21.0
 
 ### Added
-- **`edt_project_errors` says when a marker is older than its file.** A marker is a snapshot
-  that outlives the code it was written for, and a report built from old markers read exactly
-  like a fresh one – the only way to know was `edt_clean_project` with a full rebuild, minutes
-  on a large configuration, for one module. Every listed problem now carries `stale` when the
-  marker predates the file's last change on disk and `unsynchronized` when the workspace has
-  not even read that change; the summary counts them and a `hint` says what to do.
-  `refresh=true` re-reads the narrowed scope and runs an incremental build before the markers
-  are read: seconds, in place, where the clean rebuilt everything.
+- **`edt_project_errors` reports marker freshness.** Previously, the report did not distinguish
+  old markers from current ones. Refreshing required `edt_clean_project` and a full rebuild, which
+  could take minutes for one module in a large configuration. Each problem now has `stale` when its
+  marker predates the file's last disk change, and `unsynchronized` when the workspace has not read
+  that change. The summary includes counts, and `hint` suggests actions. `refresh=true` rereads the
+  selected scope and runs an incremental build before reading markers; for one module this takes
+  seconds.
 
 ## 2026-09-05 – 0.20.0
 
 ### Fixed
-- **`edt_project_errors` keeps SEVERAL severities: `severity: "ERROR,WARNING"`.** One grade was
-  never the question a caller asks - EDT reports a call to a method nobody declares as a WARNING,
-  so a check filtered to ERROR reads clean over broken code. Worse, the comma form matched no
-  severity at all: on a live workspace of 13 698 problems it answered zero, which looks exactly
-  like a clean configuration.
+- **`edt_project_errors` accepts multiple severities: `severity: "ERROR,WARNING"`.** Previously,
+  a comma-separated value matched no severity and returned zero results in a workspace with
+  13 698 problems. Filtering only `ERROR` also omitted EDT's warning for a call to an undefined
+  method.
 
 ## 2026-09-02 – 0.19.0
 
 ### Added
-- **`edt_validate_query` follows the temporary tables through the batch.** EDT's validator
-  checks each query against the metadata and the batch against nothing, so a query reading a
-  `ПОМЕСТИТЬ` table that no earlier query puts – or that an earlier query dropped – passed as
-  valid and failed only on the platform. The bridge now tracks what each query puts and drops
-  and reports such a read with its position: an ERROR for `queryText`, whose text is taken as
-  a self-contained batch; an INFO note for a module literal, where a shared temporary table
-  manager or another literal routinely supplies the table – on a large working configuration
-  every one of 195 such reads in 3125 literals was legitimate.
-- **`edt_project_errors` has a `brief` form.** One text line per problem – severity, resource
-  with line, message, check id – under a one-line summary, instead of the full objects with
-  `extraInfo` and locations that the question "is this object clean" used to pay for.
+- **`edt_validate_query` checks temporary tables across a query batch.** Previously, EDT validated
+  individual queries against metadata without considering the entire batch. A query could read a
+  `ПОМЕСТИТЬ` table that earlier queries had not created or had already dropped, and the error
+  appeared only on the platform. The bridge now tracks table creation and removal and reports the
+  read position. It returns an ERROR for `queryText`, which is treated as a self-contained batch,
+  and INFO for a module literal, where a shared temporary table manager or another literal may
+  create the table. In a tested configuration, all 195 such reads in 3125 literals were valid.
+- **`edt_project_errors` has a `brief` form.** It returns one line per problem with severity,
+  resource and line, message, and check ID, below a one-line summary. Full objects with
+  `extraInfo` and paths are omitted in this mode.
 
 ### Changed
-- **The tools page says what `edt_project_errors` sees.** A call to a method another module
-  does not have is a WARNING to EDT (`SU239`), not an error – only an undefined bare call is –
-  and `modulePath` reaches the Eclipse markers alone, so a check of generated code reads the
-  warnings and narrows by `fqn`. Measured on a live model, where such a call had looked clean.
+- **The tools page describes `edt_project_errors` results.** EDT reports a call to a missing
+  method in another module as warning `SU239`. An undefined call without a module name is an error.
+  The `modulePath` filter returns only Eclipse markers, so checking generated code requires
+  warnings and the `fqn` filter. This was verified against a running model where the earlier report
+  had not indicated the problem.
 
 ## 2026-08-30 – 0.18.1
 
 ### Changed
-- **The package description names what the bridge gives.** The PyPI summary described the
-  wrapper alone – a front-end that proxies to a running EDT – and said nothing about the
-  diagnostics, metadata, query validation, write tools, infobases and debugger behind it.
+- **The package description includes the bridge's capabilities.** The PyPI summary previously
+  described only the wrapper forwarding requests to a running EDT. It now names diagnostics,
+  metadata, query validation, write tools, infobases, and debugging.
 
 ## 2026-08-28 – 0.18.0
 
 ### Added
-- **Plugins can reach the live bridge.** A plugin handler that declares a `bridge`
-  parameter – `handler(arguments, bridge)` – receives a callable forwarding one tool call
-  to the running bridge and returning the text of its result. The wrapper never starts an
-  EDT for it: with no bridge up the callable raises with a readable message and the plugin
-  degrades to a note, instead of hanging its caller through a minutes-long headless start.
-  Both dispatch paths pass it – the MCP server and `call` on the command line. This is what
-  lets a documentation plugin answer across corpora: the books it bundles plus the Syntax
-  Helper behind the bridge, in one search.
+- **Plugins can call a running bridge.** A handler with a `bridge` parameter
+  (`handler(arguments, bridge)`) receives a callable that invokes a tool and returns its result
+  text. The call does not start EDT. If the bridge is unavailable, the callable raises an exception
+  with a message, and the plugin returns the message without waiting for a headless EDT to start.
+  The MCP server and the `call` command both pass the callable. For example, a documentation plugin
+  can search its bundled books and the bridge's Syntax Helper together.
 - **`self-update` updates the wrapper plugins too.** Every distribution publishing
   `edt_bridge.tools` entry points is updated through pip from the source it was installed
   from – its git repository (read from PEP 610 `direct_url.json`), or a package index by
@@ -361,34 +345,31 @@ to the code and the reasoning behind it.
 ## 2026-08-27 – 0.17.0
 
 ### Added
-- **The wrapper takes plugins.** External packages installed into the wrapper's environment
+- **The wrapper accepts plugins.** External packages installed in the wrapper environment
   (`pipx inject edt-bridge-mcp <package>`) declare MCP tools through the `edt_bridge.tools`
-  entry-point group; the wrapper lists them next to the bridge's tools and dispatches them
-  itself, so they answer even while no EDT is running. This is the home for what a public
-  repository cannot carry – reference material under somebody's license, tools wired to an
-  internal service. The `plugins` command reports what is plugged in and why a broken plugin
-  refused to load; `EDT_BRIDGE_NO_PLUGINS=1` turns the discovery off. A failing entry point,
-  a duplicated tool name or a name that shadows the wrapper's own tools refuses loudly at
-  discovery – except in the MCP server itself, which keeps serving the bridge and reports the
-  failure on stderr instead of dying with the whole tool surface.
+  entry-point group. The wrapper lists and runs those tools even when EDT is not running.
+  Plugins can provide reference material under a third-party license or tools for an internal
+  service. The `plugins` command lists plugins and explains loading errors;
+  `EDT_BRIDGE_NO_PLUGINS=1` disables discovery. A failing entry point, duplicate tool name or
+  name that shadows a wrapper tool causes a discovery error. The MCP server continues serving
+  the bridge and reports the error to stderr.
 
 ## 2026-08-26
 
 ### Added
-- **`edt_validate_query` reads the query out of the module itself.** Address a module
-  (`modulePath`, optionally one `method`) instead of pasting the text: the bridge pulls the
-  `|`-framed query literals out of the live model, drops the framing and validates each one,
-  so the checked text cannot drift from what the module holds - and one call covers every
-  query of a module. What qualifies is deliberately narrow: a multiline framed literal whose
-  first word is ВЫБРАТЬ or SELECT; a single-line caption never reaches the validator, and the
-  pieces of a query built by concatenation never qualify.
+- **`edt_validate_query` reads queries from a module.** Specify a module with `modulePath` and,
+  optionally, one `method` instead of pasting the query text. The tool extracts query literals
+  framed with `|` from the model, removes the framing and validates each query. One call checks
+  the module's queries against their current text. A query must be a framed multiline literal
+  whose first word is ВЫБРАТЬ or SELECT. Single-line captions and parts of concatenated queries
+  are not recognized.
 
 ## 2026-08-23 – 0.15.0, 0.16.0
 
 ### Added
 - **`edt_add_form_handler`** registers an event handler on a form or on one of its items – the
   `handlers` entry in `Form.form` without which the platform never calls the procedure. The
-  allowed events come from EDT, and the stub it can write carries the event's own signature and
+  allowed events come from EDT, and the optional stub contains the event's signature and
   directive.
 - **`edt_modify_form_item` renames an item** (`newName`) – nothing could: `edt_rename` works on
   metadata, not on the pieces of a form.
@@ -402,34 +383,32 @@ to the code and the reasoning behind it.
   read, and both answers now carry `formFqn` next to the old `fqn` key.
 
 ### Fixed
-- **`shutdown` sees a session whose port has gone silent.** The CLI outlives the framework it
-  hosted and keeps the workspace lock, and the answer used to be "nothing to shut down" - the
-  next start then failed on a lock nobody was looking at.
+- **`shutdown` detects a session after its port closes.** The CLI can outlive the framework it
+  hosted and retain the workspace lock. Previously, it answered "nothing to shut down" and the
+  next start failed because of that lock.
 - **`--json-file` accepts a file with a byte order mark**, which is what the Windows shells
   write by default.
-- **`edt_dump_external_object` falls back to the on-disk route** when EDT's own dumper refuses –
-  an object bound to a base configuration used to end there – and puts back the auto-dump
-  generation if the refusal switched it off. `route` pins the builder.
+- **`edt_dump_external_object` falls back to the on-disk route** when the EDT dumper refuses,
+  for example for an object bound to a base configuration. It also restores auto-dump generation
+  if the refusal disabled it. Use `route` to select the route explicitly.
 - **`scripts/sync-docs.mjs` survives a CRLF checkout** – it used to leave the page frontmatter
   inside the README block, which then read as stale.
-- **An argument the schema does not know refuses the call.** It used to be dropped in silence:
-  an erase asked with `deleteContents` kept every file and answered like a done deed. The
-  refusal names the near miss and lists what the tool takes.
-- **The launchers name the installation they start from.** There are several EDT installations
-  on a machine, the script picks one itself, and the swapped jar lies in the dropins of the one
-  somebody wrote down: a fix that went into another installation looked like a jar that had not
-  been built. `run-headless.ps1` and `run-gui.ps1` now print the installation, its dropins, the
-  name and time of the bridge jar, warn when there are two of them (Equinox loads an arbitrary
-  one) and when the jar in `build/` is newer than the one installed.
+- **An argument outside the schema rejects the call.** Previously, the argument was ignored:
+  an erase requested with `deleteContents` kept the files but returned a success response. The
+  error now suggests a similar name and lists the accepted arguments.
+- **The launchers report the EDT installation they use.** `run-headless.ps1` and `run-gui.ps1`
+  print the selected installation, its dropins, and the bridge jar name and time. They warn if
+  dropins contains two jars (Equinox loads an arbitrary one) or the jar in `build/` is newer than
+  the installed jar. This helps identify a jar installed in another EDT copy.
 
 ## 2026-08-17 – 0.14.0
 
 ### Added
-- **OBJECT types in the form-attribute grammar** – `ВнешняяОбработкаОбъект.X`,
-  `СправочникОбъект.X` and the rest of the family now parse, so a main form attribute can be
-  added by the tool. Until now only reference types did, and `edt_add_form_attribute` answered
-  "type does not parse": the attribute that reaches the object module had to be written into
-  `Form.form` by hand.
+- **OBJECT types in the form-attribute grammar.** The tool parses
+  `ВнешняяОбработкаОбъект.X`, `СправочникОбъект.X` and other object types, allowing it to add
+  the main form attribute. Previously, only reference types parsed, `edt_add_form_attribute`
+  returned "type does not parse", and the attribute used to reach the object module had to be
+  added to `Form.form` by hand.
 
 ### Fixed
 - **A table's title no longer lands on every generated column.** EDT hands the new-item
@@ -440,12 +419,11 @@ to the code and the reasoning behind it.
 ## 2026-08-16 – 0.13.0
 
 ### Added
-- **`edt_import_project`** – register an EXISTING project directory in the workspace, the
-  programmatic form of "Import existing project". The create/work/delete cycle lacked that
-  step, so a second project – the BASE one an extension in modification-and-control mode is
-  validated against, taken from a worktree of the target release – could only be added by
-  hand in the GUI. A name of its own lets two checkouts of one repository sit side by side;
-  nothing on disk is rewritten.
+- **`edt_import_project` registers an existing project directory in the workspace.** It is the
+  programmatic equivalent of "Import existing project". Previously, the base project from a
+  worktree of the target release, used to validate an extension in modification-and-control mode,
+  had to be added through the GUI. A separate project name allows two checkouts of one repository
+  to coexist. Files on disk are not rewritten.
 - **Every `EDT_BRIDGE_*` variable is documented**, in two tables on the install page – the ones
   the wrapper reads at its start and the ones the plugin reads inside EDT, each with its flag or
   launch property and its default. `EDT_BRIDGE_PORT_SCAN` and `EDT_BRIDGE_WINDOW_WAIT` were
@@ -457,19 +435,19 @@ to the code and the reasoning behind it.
   stops finding anything looks exactly like a clean repository.
 
 ### Changed
-- **The tool catalogue has a single source.** It used to be kept by hand in both the README and
-  the site page; `docs/tools*.md` is the source now, and `scripts/sync-docs.mjs` writes it into
-  the README between marker comments, in both languages.
-- **The diagrams follow the reader's theme.** Their palette moved into CSS variables with a
+- **The tool catalogue has a single source.** Previously it was maintained by hand in the README
+  and on the site page. `docs/tools*.md` is now the source; `scripts/sync-docs.mjs` inserts it
+  between markers in both README editions.
+- **The diagrams match the site theme.** Their palette moved into CSS variables with a
   `prefers-color-scheme` branch, so the site shows a picture that matches the page around it.
-  A README still gets a PNG, and which palette that PNG carries is no longer decided by the
+  README files still use PNG with a fixed palette independent of the
   machine rendering it: `scripts/render-diagrams.py` (replacing `render-diagrams.sh`) forces the
   palette before the screenshot.
-- **The architecture diagram opens the front page** – it used to be reachable only from the
-  READMEs on GitHub, which is a strange place for the picture that explains the whole layout.
-- **The security page no longer says everything twice.** It carried the README's bullet list and
-  then a threat model repeating it, and pointed back at the README for "the full picture"; there
-  is one list now, and the port settings link to the environment variables.
+- **The architecture diagram is on the front page.** Previously, it was available only from the
+  READMEs on GitHub.
+
+- **The security page no longer duplicates its content.** The README list and the threat model
+  that repeated it were replaced by one list. Port settings link to the environment variables.
 
 ### Fixed
 - **`edt_clean_project` no longer calls a count final before validation has run.** It waited
@@ -477,35 +455,31 @@ to the code and the reasoning behind it.
   families it joins: right after a clean the count sits at zero simply because nothing has
   been reported yet, and "0 problems, settled" is the worst possible answer there – that
   number is what clean was called for. The wait now also requires the workspace to be idle,
-  and the result says whether validation was seen running at all.
+  and the result reports whether validation ran.
 - **`edt_build_extension` creates the directory of the file it writes.** `ibcmd` does not,
   and its refusal reads like a build problem rather than a missing folder. The dry-run plan
   now names the directory it is going to create.
-- **The delivery diagram ignored the reader's theme on the tools page.** The page embedded the
-  PNG – the file whose palette is baked in for the README – so a reader in the light theme was
-  served a dark picture. The page shows the SVG now, and the injected README copy gets the PNG
-  by a swap in `scripts/sync-docs.mjs`: one source, the right file on each surface. The guard
-  judges it, because the same slip is invisible until someone looks at the page in the other
-  theme.
+- **The delivery diagram on the tools page follows the site theme.** Previously the page displayed
+  the PNG with its fixed README palette, so the light theme showed a dark diagram. The page now
+  uses SVG, and `scripts/sync-docs.mjs` substitutes PNG for the README. The documentation guard
+  checks the file selection.
 - **The README's copy of the tool catalogue had drifted from the site page** – `edt_designer_agent`
   had grown its `sweep` action and idle timeout, and the wrapper's own `edt_open_gui` had never
   been listed there at all. Both were only on the site; the two are one text now.
+
 ## 2026-08-07 – 0.12.0
 
 ### Added
-- **`edt_project_errors` names the disk folder behind each validated project** (the `locations`
-  object of the report, also spelled out in the tool description). The model validates the
-  REGISTERED folder, so a caller editing a parallel checkout of the same sources used to get a
-  plausible-looking report about the wrong tree - silently, since the file names match. Now the
-  divergence is visible in the report itself.
-- **`edt_symbol_info` answers with a local variable's computed types.** A reference to a
-  variable (even one assigned on the previous line) yielded `types: []` while the editor hover
-  showed the types: the variable half of the type system is INFERRED, and a bare resource load
-  carries no type states. The tool now installs the tree type system on the module on demand
-  (one inference pass per ask) and computes against the module's actual environments. On a
-  method-access name the answer also carries `invocationTypes` - the computed type(s) of the
-  containing call, next to the DECLARED return type of the access itself; callers used to probe
-  commas and closing parens to reach exactly that.
+- **`edt_project_errors` reports the directory of each validated project.** The directory is
+  included in the report's `locations` object and described in the tool reference. EDT validates
+  the registered directory, so someone editing a parallel checkout could receive a report for the
+  other copy with matching file names. The path now makes that difference visible.
+- **`edt_symbol_info` returns the inferred types of a local variable.** Previously, a variable
+  reference returned `types: []` even when the editor showed its types. The tool now installs the
+  tree type system on the module on demand and performs one inference pass per request. On a
+  method-access name, the response includes `invocationTypes` with the inferred call types next
+  to the declared return type of the access. Previously, callers could obtain them only at commas
+  and closing parentheses.
 
 ### Changed
 - **Building from source picks a JDK matching the EDT bundles by itself.** Newer EDT ships
@@ -518,167 +492,147 @@ to the code and the reasoning behind it.
 ## 2026-07-31 – 0.11.2
 
 ### Fixed
-- **`self-update` right after a release no longer misses it.** The wrapper's file list came from
-  the JSON metadata of PyPI, a cache that catches up minutes after an upload: within that window
-  the command answered "already current", and with an explicit version - "no wheel", because the
-  files were read from that same lagging document. The list now comes from the SIMPLE index
-  (PEP 691), the newest release is ranked numerically (`0.9.0` before `0.11.1`, no pre-releases,
-  no yanked files), and the JSON metadata stays as the fallback for an index that does not speak
-  PEP 691. Only the wrapper half is affected - the jar keeps coming from the assets of a GitHub
-  release, a different source with no such cache.
+- **`self-update` detects a release immediately after publication.** Previously, the wrapper
+  fetched its file list from PyPI JSON metadata, which can lag behind publication by minutes.
+  During that interval the command reported "already current", or "no wheel" for an explicit
+  version. It now uses the PEP 691 SIMPLE index. Releases are ordered numerically (`0.9.0` before
+  `0.11.1`), excluding pre-releases and yanked files. JSON remains the fallback for an index without
+  PEP 691. The change affects the wrapper; the jar still comes from GitHub release assets.
 
 ## 2026-07-31 – 0.11.1
 
 ### Fixed
-- **`self-update --from` accepts the repository root.** The wrapper lives in the repository's
-  `python/` subdirectory, and the command insisted on being handed that subdirectory - passing the
-  root, which is what one naturally does, answered "no edt_bridge_mcp package" and turned an
-  obvious command into a second attempt. All three shapes are now looked for, and a directory with
-  none of them says where it looked.
+- **`self-update --from` accepts the repository root.** Previously, the command required the
+  `python/` subdirectory containing the wrapper. Passing the root returned "no edt_bridge_mcp package".
+  The command now checks all three supported layouts and reports the paths checked when
+  the package is absent.
 
 ## 2026-07-30 – 0.11.0
 
 ### Added
-- **`edt_open_gui` – hand the workspace from the headless EDT to the GUI one.** Reaching the EDT
-  window meant finding 1cedtcli in the task manager, killing it and starting EDT by hand; the
-  bridge could stop its EDT but not open the next one. The tool stops the headless session, waits
-  until its processes are actually gone and launches the GUI EDT on the same workspace. `/shutdown`
-  alone does not end such a session, which a live run proved: it stops the OSGi framework, the port
-  falls silent, and 1cedtcli keeps running because it was started with a keepalive pipe on stdin. So
-  the keepalive shell is closed next - not a kill of EDT, which has already stopped itself, but the
-  closing of the pipe that holds the process, after which the CLI reaches EOF and exits. Waiting on
-  the port is not enough – it falls silent while the runtime still holds the workspace lock, and
-  that leftover is exactly what gets hunted by hand; `force` kills what does not stop in time,
-  the keepalive shell first, because it is the CLI's parent and a tree kill from below never
-  reaches it. Served by the WRAPPER, not by the bridge: a tool inside EDT cannot report on the EDT
-  it just ended. Also `edt-bridge-mcp gui` in the shell.
-- The window is brought to the FRONT, and a second run of the command raises it again. A
-  process launched detached has no foreground rights: the workbench came up behind every
-  other window, which is indistinguishable from "it never started". The launch is no longer
-  detached, and the window is found by walking the launcher's process tree - it belongs to
-  the javaw the launcher starts, and that javaw runs from whatever JDK the installation
-  resolved, which need not be inside the EDT folder at all. Loading a large workspace takes
-  minutes, so the wait for the window is bounded (`EDT_BRIDGE_WINDOW_WAIT`, 90 s) and a miss
-  is reported instead of endured.
+- **`edt_open_gui` transfers the workspace from headless EDT to GUI EDT.** Previously, the bridge
+  could stop EDT, but opening a window required manually ending 1cedtcli and starting EDT. The tool
+  stops headless EDT, waits for its processes to exit, and starts GUI EDT on the same workspace.
+  A live check showed that `/shutdown` alone did not end the session: the OSGi framework stopped
+  and the port closed, but 1cedtcli continued running with a keepalive pipe on stdin. After EDT
+  stops, the keepalive shell is closed, the CLI receives EOF, and the process exits. Waiting for
+  the port is insufficient because the runtime may still hold the workspace lock. `force` ends
+  processes that do not stop in time, beginning with the parent keepalive shell: terminating the
+  process tree from the CLI cannot reach its parent. The wrapper serves
+  the tool because a tool inside EDT cannot return a result after stopping EDT. The command-line
+  equivalent is `edt-bridge-mcp gui`.
+- The window is brought to the foreground; a repeat call raises it again. Previously, a detached
+  process had no foreground rights, so the window could open behind others. The launch is no longer
+  detached. The window is found by traversing the launcher's process tree and belongs to javaw using
+  the JDK resolved by the installation, which need not be inside the EDT directory. A large
+  workspace can take minutes to load. The window wait is bounded (`EDT_BRIDGE_WINDOW_WAIT`,
+  90 seconds), and a missing window is reported.
 
 ### Fixed
-- **A localized Windows hid every EDT process from the wrapper.** `tasklist` answers in the console
-  OEM codepage, and the wrapper decoded it as UTF-8: the decode failed inside the reader thread and
-  left the listing EMPTY, which every caller read as "no such process". So the guard that refuses
-  to start a headless EDT while a GUI one is running never fired on such a machine, and a second
-  EDT was launched onto a locked workspace. The listing is now decoded with the console codepage.
+- **The wrapper detects EDT processes on localized Windows.** `tasklist` returns output in the
+  console OEM code page, but the wrapper decoded it as UTF-8. The decoding error left an empty
+  process list, so the guard against starting headless EDT while GUI EDT was running did not work.
+  The output is now decoded with the console code page.
 
 ## 2026-07-27 – 0.10.0
 
 ### Added
-- Configurator agents now clean up after themselves. Every agent writes a record into its own
-  `/AgentBaseDir` – a directory a clean stop removes and a crash leaves behind – naming the
-  infobase, the process and the id of the cluster session it opened. When a later run finds such a
-  record with a dead process, it ends exactly that session and removes the directory: the session of
-  a crashed agent holds the infobase's CONFIGURATION LOCK, and until now the next call failed with
-  "the infobase could not be locked for configuration" until somebody found and terminated it by
-  hand. Ownership is proven by the record, never guessed from the session's host and user – EDT
-  starts configurator agents of its own, and from the cluster's side they are indistinguishable, so
-  the obvious heuristic would end the developer's own configurator. Swept before every agent start
-  and on demand with `edt_designer_agent action=sweep`; `action=list` reports what is left over, and
-  `stopRunning=true` also stops agents of an earlier bridge process (off by default).
-- An agent that has been idle stops by itself. A standing agent of a server infobase costs a client
-  license and a Designer session for as long as it lives, which on a stand with a small pool is a
-  seat taken from a person. Configured by `edt.bridge.agent-idle-minutes` /
-  `EDT_BRIDGE_AGENT_IDLE_MINUTES` / the `agentIdleMinutes` preference: 30 minutes by default, `off`
-  or `0` disables it – and so does an unparsable value, deliberately, because a typo must not
-  silently shorten an agent's life. A call in flight always wins: the reaper takes the agent's lock
-  and holds it across the stop, so an operation can never be cut off mid-way. `edt_designer_agent
-  action=list` reports each agent's idle time and the configured timeout.
+- Each configurator agent records the infobase, process, and cluster session ID in its
+  `/AgentBaseDir`. A normal stop removes the directory; a crash leaves it behind. If the agent
+  process has exited, the bridge uses the record to end its session and remove the directory.
+  An orphaned session holds the configuration lock, causing the next call to fail with
+  "the infobase could not be locked for configuration" until the session is terminated. Ownership
+  is established from the record; the session host and user are insufficient because EDT also
+  starts configurator agents that appear identical to the cluster. Cleanup runs before every agent
+  start and on request with `edt_designer_agent action=sweep`. `action=list` reports leftovers.
+  `stopRunning=true` also stops running agents from a previous bridge process; it is off by default.
+- An agent for a server infobase stops after an idle period. While running, it occupies a client
+  license and a Designer session. Configure the timeout with `edt.bridge.agent-idle-minutes`,
+  `EDT_BRIDGE_AGENT_IDLE_MINUTES`, or the `agentIdleMinutes` preference. The default is 30 minutes;
+  `off`, `0`, or an unrecognized value disables the stop. The agent lock is held during stopping,
+  so an operation in progress is not interrupted. `edt_designer_agent action=list` reports each
+  agent's idle time and the configured timeout.
 
 ### Fixed
-- Stopping an agent no longer leaves its session in the cluster. The polite shutdown was asked for
-  and the process killed immediately afterwards, giving it no time to close the infobase connection
-  – so every stop manufactured exactly the orphan described above, and the kill also held the
-  agent's own log file open, leaving the base directory behind. The process is now waited out (20 s)
-  before it is killed, and a session is ended explicitly when a kill was still necessary.
+- Stopping an agent closes its cluster session. Previously the process was killed immediately
+  after a graceful stop was requested, before it could close its infobase connection. The session
+  remained in the cluster, and the open log could prevent removal of the agent directory. The process
+  is now given 20 seconds to stop before forced termination. If it must be terminated, the session is
+  closed explicitly.
 
 ## 2026-07-24 – 0.9.0
 
 ### Added
-- `edt_infobase_maintenance` – a maintenance window around a database-configuration update,
-  through `rac`: `begin` raises `scheduled-jobs-deny` (optionally `sessions-deny` with a
-  permission code), watches the session list until only the allowed applications remain and
-  reports "clear to update"; `end` lowers the flags; `status` just reports. The point: on a
-  lively base BackgroundJob sessions respawn every minute, so terminating them is useless –
-  with the flag up they drain by themselves within a minute and nothing has to be killed.
-  Verified live on a clustered infobase: raising the flag stopped the respawn and the jobs
-  drained on their own; lowering it brought the queue back within seconds. The configurator
-  agent cannot do this at all – its SSH client has no operation for the denial flags – so rac
-  is the route, and the tool needs the infobase administrator.
+- `edt_infobase_maintenance` manages a maintenance window for database configuration updates
+  through `rac`. `begin` sets `scheduled-jobs-deny` and optionally `sessions-deny` with a
+  permission code, waits until only allowed applications remain, and returns "clear to update".
+  `end` clears the flags; `status` reports their state. BackgroundJob sessions are recreated every
+  minute on a running infobase; after denial is set, they finish within a minute. In a clustered
+  infobase test, the denial stopped their recreation,
+  and the queue returned within seconds after it was cleared. The configurator agent's SSH client
+  cannot manage these flags; the tool uses `rac` and requires an infobase administrator.
 - The command reference and its generator are under tests (`python/tests/test_cli_docs.py`):
   every argument documented, the Russian run actually Russian, the two language versions
   differing, every command covered by a page section and answering `--help` within a timeout,
   and the committed pages equal to what the generator produces. The generator itself gained
   the missing timeout – a command that does not parse `--help` starts the server and hangs.
-- `edt_add_route` warns about the construct that will not load: an OWN url template added to
-  an ADOPTED service of an extension is accepted by EDT and serialised quietly, but the
-  platform refuses to load it in extension compatibility mode 8.5.1 and below. The result now
-  carries `serviceAdopted`, the extension's `compatibilityMode` and a warning saying exactly
-  that – before this the refusal only surfaced at infobase load, far from the tool that wrote
-  the route.
-- `edt-bridge-mcp shutdown` – the graceful end of the EDT behind the bridge, instead of
-  killing its processes. The wrapper POSTs the bridge's new `/shutdown` (token-gated), which
-  stops the OSGi framework in order: the workspace `.lock` is released for a GUI to start,
-  and the configurator agents EDT itself runs close properly – their cluster sessions leave
-  with them, where a killed process leaves its session holding the configuration lock. A GUI
-  EDT is refused unless `--force` is passed, so a script cannot close somebody's window by
-  accident; shutting down when no bridge runs is a quiet no-op.
+- `edt_add_route` warns about an own URL template on an adopted extension service. EDT accepts and
+  serializes it, but the platform cannot load it in extension compatibility mode 8.5.1 or earlier.
+  The response includes `serviceAdopted`, the extension's `compatibilityMode`, and a warning.
+  Previously the failure appeared when loading the infobase.
+- `edt-bridge-mcp shutdown` gracefully stops the EDT serving the bridge. The wrapper sends a
+  token-protected request to `/shutdown`, which stops the OSGi framework in order. The workspace
+  `.lock` is released for GUI startup and configurator agents close their cluster sessions. A
+  forcibly terminated process can leave a session holding the configuration lock. GUI EDT
+  requires `--force` to prevent accidental window closure. If the bridge is not running, the
+  command completes without action.
 
 ### Changed
-- A fully applied `edt_infobase_sessions terminate` answers with the terminated ids (and
-  `terminatedCount`) instead of the whole session list: the list was read before the
-  terminations, so the ended sessions still looked alive in it – and on a lively cluster it
-  drowned the answer in noise. `list`, dry-runs and partial failures keep the list.
-- `edt_delete_object` now says in its description what a live run taught: building the delete
-  cascade analyses references across every open project, which takes minutes in a workspace
-  with a large configuration – and the operation runs to completion even when the client
-  stops waiting. The five-minute "hang" of the first extension-project delete was exactly
-  that: the cascade finished in the background and left the model clean.
-- `edt_update_infobase` (transport=edt) says what rides along: EDT's synchronization has no
-  per-project scope – it brings the infobase in line with EVERY workspace project associated
-  with it, and a configuration project drags its extension projects by dependency. The result
-  lists them all in `syncProjects`, the plan names them, and a multi-project update carries a
-  warning pointing at transport=agent for loading one project only. Before this, an update
-  from the base configuration quietly took two unrelated extension projects with it.
-- A FILE infobase's configurator agent is stopped as soon as its operation is over: the
-  standing agent held the base open, so the next batch designer – or a human opening the
-  configurator – was refused with "the infobase is already opened in Designer". A server
-  infobase keeps its agent between calls as before; reconnecting to a local file is cheap,
-  the lock is not.
-- The configuration-lock refusal ("Ошибка блокировки информационной базы для
-  конфигурирования") now carries a hint: the usual culprit is the Designer session of an
-  agent that died – the cluster keeps the session, the session keeps the lock, and nothing in
-  the platform's text points there. The hint names `edt_infobase_sessions` as the way out.
+- A fully applied `edt_infobase_sessions terminate` returns terminated session IDs and
+  `terminatedCount` instead of the full list. Previously, the list was read before termination,
+  so it included ended sessions and could be large. `list`, dry-runs and partial failures still
+  return the list.
+
+- The `edt_delete_object` description explains delete-cascade construction. References are
+  analyzed across all open projects, so the operation can take minutes in a large workspace and
+  continue after the client's timeout. During a check, the first deletion in an extension project
+  took five minutes; the cascade finished in the background and left the model clean.
+- `edt_update_infobase` (transport=edt) reports the synchronization scope. EDT synchronizes every
+  workspace project associated with the infobase and pulls in extension projects through the
+  configuration project's dependencies. The response lists projects in `syncProjects` and the
+  plan names them. A multi-project update includes a warning pointing to transport=agent for loading
+  one project. Previously, updating the base configuration also loaded two unrelated extension
+  projects without a warning.
+- A file infobase's configurator agent stops immediately after its operation. Previously, the
+  agent kept the infobase open, causing the next batch Designer or user to receive
+  "the infobase is already opened in Designer". A server infobase retains its agent between calls as before.
+
+- The configuration-lock error ("Ошибка блокировки информационной базы для
+  конфигурирования") includes a hint to use `edt_infobase_sessions`. A terminated agent's
+  Designer session can remain in the cluster and hold the lock; the original platform message
+  does not identify this cause.
 
 ### Fixed
-- The agent reconnects by itself when a database restructure drops the process's infobase
-  connection: "Соединение с информационной базой не установлено" is a gate BEFORE a command
-  runs, so every agent-backed operation now reconnects once and re-runs instead of failing –
-  the reply used to cost a manual retry after every heavy step (measured: five times in one
-  evening). Other errors pass through unchanged.
-- `edt_infobase_sessions` died with "Ошибка разбора параметра: --infobase-user" whenever the
-  infobase credentials were passed: `rac session list` takes only `--infobase` and
-  `--licenses`, no infobase authentication at all. The credentials are no longer sent there
-  (and no longer advertised by the tool) – they belong to the operations that do need them.
-- Agent error messages no longer drown the diagnosis in the platform's licensing dump: one
-  refusal used to arrive as tens of kilobytes – the full hardware inventory repeated per
-  license file and per lookup stage, wrapped again by the SSH client. The gateways now drop
-  the inventory lines and the repeats (with an "N lines omitted" note); ordinary messages
-  pass through untouched. Measured live: ~25 KB down to 2.4 KB, the first line already says
-  "no license".
-- The platform speaks two languages and the bridge now hears both: every reply it recognises
-  – the configuration-lock refusal, the agent's "not connected to the infobase" gate that
-  drives the automatic reconnect, "extension not found", ibcmd asking for credentials – is
-  matched against the English wording as well as the Russian one, both read out of the
-  platform's own resource bundles. The ibcmd recogniser's earlier English guess
-  ("authentication is required") is corrected to the platform's actual string ("Authentication
-  in the infobase is required..."), which it used to miss.
+- The agent reconnects when a database restructure interrupts its infobase connection. The
+  response "Соединение с информационной базой не установлено" occurs before the command runs.
+  Agent-backed operations now reconnect and retry once; previously they required a manual retry
+  (five times in one evening in a measurement). Other errors remain unchanged.
+
+- `edt_infobase_sessions` no longer passes infobase credentials to `rac session list`. That command
+  accepts only `--infobase` and `--licenses` and does not authenticate to the infobase. Previously,
+  credentials caused "Ошибка разбора параметра: --infobase-user". The tool no longer declares or
+  passes those parameters.
+- Agent error messages omit repeated licensing details. Previously, an error could reach tens of
+  kilobytes: the hardware inventory was repeated for each license file and lookup stage, then
+  included again by the SSH client. Gateways omit inventory lines and repetitions with an
+  "N lines omitted" note; other messages are retained. In a live measurement, the response shrank
+  from ~25 KB to 2.4 KB, with "no license" on the first line.
+
+- Platform response recognition supports Russian and English text from the platform's resource
+  bundles: configuration-lock refusal, the agent's "not connected to the infobase" response used
+  for automatic reconnection, "extension not found", and the ibcmd credential prompt. The ibcmd
+  recognizer's guessed "authentication is required" was replaced with the platform's actual
+  "Authentication in the infobase is required...".
 
 ## 2026-07-22 – 0.8.0
 
@@ -690,7 +644,7 @@ to the code and the reasoning behind it.
 - `edt_project_errors` reports a marker's `sourceType` and `extraInfo` – what tells the two
   validation families apart: documented checks come from the standards framework, a short code
   like `SU200` comes from EDT's own metadata validation.
-- `edt_check_info` recognises a short code and says what it is instead of "nothing found". There is
+- `edt_check_info` recognizes a short code and identifies it instead of returning "nothing found". There is
   no code-to-slug mapping to dig out, as 0.7.1 assumed – the families are simply different, and
   matching by title stays the way to a description.
 
@@ -704,43 +658,50 @@ to the code and the reasoning behind it.
 ## 2026-07-21 – 0.6.0, 0.7.0, 0.7.1
 
 ### Added
-- **The configurator agent as a third transport to an infobase.** Started with `/AgentMode`, it
-  holds an open session and takes commands over SSH – and authenticates **as the infobase user**,
-  which neither EDT's synchronization nor `ibcmd` can do. A server infobase that authenticates its
-  users is therefore reachable, extensions included. One agent per infobase, reused;
-  `edt_designer_agent` lists and stops them.
-- `edt_infobase_config_state` – is a database-configuration update still pending? The platform
-  answers it itself: the update is started and its confirmation refused, so nothing is applied and
-  the waiting changes come back as a list.
-- `edt_update_database_config` – applies the database configuration. Loading a project does not do
-  this, and until it happens every session keeps running the previous code – which is what a freshly
-  added HTTP route answering 404 looks like. `sessionTermination=force` does deny / terminate /
-  apply in one call.
-- `edt_infobase_sessions` – the cluster's sessions through `rac`: list and terminate. Neither the
-  agent nor `ibcmd` reaches them. It exists because a designer that was killed rather than closed
-  keeps the configuration lock, and every later operation then fails as though somebody else were
-  configuring the base.
-- `edt_delete_extension` – remove an extension from an infobase, the step that closed a one-way
-  lifecycle. Needs `force` on top of `apply`.
-- `edt_infobase_dump` – dump an infobase to a `.dt` through `ibcmd`: the backup that belongs before
-  applying a configuration.
-- `edt_update_infobase` takes `transport=agent`: designer XML goes straight into the base, with no
-  throwaway infobase and no `.cf` in between – which is what makes it usable for a configuration
-  with a million objects.
-- `edt_extension_properties` takes `infobase` and routes through the agent – that is what makes a
-  server infobase's extensions reachable at all.
+- **The configurator agent is a third transport to an infobase.** Started with `/AgentMode`, it
+  keeps a session open, accepts SSH commands and authenticates **as the infobase user**. Neither
+  EDT synchronization nor `ibcmd` provides this login. This makes server infobases that
+  authenticate users and their extensions accessible. One agent is reused per infobase;
+  `edt_designer_agent` lists and stops agents.
+
+- `edt_infobase_config_state` checks whether a database configuration update is pending. The
+  platform starts the update without confirmation, so nothing is applied and pending changes are
+  returned as a list.
+
+- `edt_update_database_config` applies the database configuration. Loading a project does not
+  apply it, so sessions continue running the previous code until application. For example, a new
+  HTTP route returns 404. `sessionTermination=force` denies sessions, terminates them and applies
+  the configuration in one call.
+
+- `edt_infobase_sessions` lists and terminates cluster sessions through `rac`; neither the agent
+  nor `ibcmd` provides this operation. A forcibly terminated Designer can leave a session holding
+  the configuration lock, causing later operations to fail.
+
+- `edt_delete_extension` removes an extension from an infobase. The operation requires `force`
+  and `apply`.
+
+- `edt_infobase_dump` exports an infobase to `.dt` through `ibcmd`, allowing a backup before
+  configuration application.
+
+- `edt_update_infobase` accepts `transport=agent` to load Designer XML into the infobase without
+  an intermediate infobase or `.cf`. This route supports configurations with a million objects.
+
+- `edt_extension_properties` accepts `infobase` and uses the agent to access extensions in a server
+  infobase.
+
 - `edt_add_route` – add a route to an `HTTPService`. It used to mean editing the `.mdo` by hand and
   generating the uuids of the `urlTemplates` block and its nested `methods`.
 - The ibcmd-backed tools take the 1C infobase credentials next to the DBMS ones. Without them ibcmd
   prompts for a user name on stdin – for a non-interactive caller a hang, not an error, and it
   ignores EOF (134 MB of prompts in 60 seconds, measured). Output is now read incrementally and the
   process killed the moment a prompt appears.
-- Agent-backed tools address an infobase EDT does not know: `srv\base`, or a file base's directory.
+- Agent-backed tools accept an infobase not registered in EDT: `srv\base` or a file infobase
+  directory.
 - Each ibcmd invocation gets its own working directory; without it they lock the same one and the
   next invocation anywhere fails.
 
 ### Changed
-- `edt_project_errors` can answer "what is wrong with the module I just edited". It used to take a
+- `edt_project_errors` supports checking a single module. It used to take a
   project name and return everything – 13 850 problems and ~5 MB on a large configuration. New
   `fqn` / `modulePath`, `severity` and `countOnly`, plus `total`, `bySeverity`, `bySource` and a
   capped list.
@@ -748,49 +709,50 @@ to the code and the reasoning behind it.
   module's entire catalogue along – 147 methods on one production module, re-sent on every read.
 - `edt_module_text`, `edt_add_method` and `edt_delete_method` resolve `HTTPService.X` and
   `WebService.X`: all three were affected by one gap in the module resolver's folder map.
-- The README tool tables gained a section for everything that talks to a running infobase, with the
-  transports spelled out – which one reaches what is the first thing a reader needs. Both diagrams
-  redrawn.
+- The README tool tables include a section for tools that access a running infobase, with the
+  transport identified for each tool. Both diagrams were redrawn.
 - A test suite for the wrapper plus a `ci` workflow (Linux and Windows, 3.10 and 3.12) that both
-  release workflows call first, so a red suite stops a release. Its core is the three regressions
-  that actually shipped.
+  release workflows call first, so a red suite stops a release. The suite includes three regressions found after release.
 - JUnit coverage for the EDT-independent part of the plugin, moved to `...edtbridge.core` so a plain
   JDK compiles and tests it.
 
 ### Fixed
 - `self-update` left a stale jar in `dropins` when the release jar was already there – and two copies
   of one bundle are what makes Equinox resolve an arbitrary one.
-- The diagrams lost their transparent corners; `scripts/render-diagrams.sh` now pins the flags that
-  decide it, a recipe that had lived nowhere.
+- Transparent corners were removed from the diagrams. `scripts/render-diagrams.sh` now fixes the
+  relevant flags, which were not previously documented.
 
 ## 2026-07-19 – 0.3.0, 0.3.1, 0.4.0, 0.4.1, 0.5.0
 
 ### Added
-- Forms, the full set: `edt_add_form` creates a managed form through EDT's own generator – the engine
-  behind the "New form" wizard. Items (`edt_add_form_item` and its modify/remove pair) go through the
-  service the form editor calls, so naming, ids, a field's actual type and a table's auto-filled
-  columns are decided by EDT. Members likewise: `edt_add_form_attribute` /
-  `edt_add_form_command` with their pairs, ids from EDT's own service, handler stubs written into the
-  form module. Removals list what still binds to the member and require `force`.
-- `edt_adopt_object` – adopt an object of the base configuration into an extension through EDT's own
-  adopter. Without it a created extension project stopped halfway: intercepting a method requires the
-  owning object adopted first.
-- `edt_search_modules` – full-text search across a project's BSL modules. Reading goes through
-  Eclipse's buffer manager, so a module open in an editor is searched as it currently stands, unsaved
-  edits included.
+- Form tools: `edt_add_form` creates a managed form with the EDT generator used by the "New form"
+  wizard. `edt_add_form_item` and its modify/remove counterparts use the form editor's service;
+  EDT sets names, IDs, field types and automatically generated table columns. Similarly,
+  `edt_add_form_attribute` and `edt_add_form_command` and their counterparts use EDT's service
+  for IDs and write handler stubs to the form module. Removals list remaining references and
+  require `force`.
+
+- `edt_adopt_object` adopts a base configuration object into an extension through EDT's adopter.
+  The owning object must be adopted before its method can be intercepted.
+
+- `edt_search_modules` searches a project's BSL modules through Eclipse buffers, including unsaved
+  changes in modules open in an editor.
+
 - `edt_clean_project` – discard build results so validation runs again, the programmatic equivalent
   of EDT's "Clean". A stale marker can otherwise outlive the code that caused it.
 - `edt_delete_project` – remove a project from the workspace through Eclipse, so its resource tree is
-  updated; deleting the folder by hand leaves a ghost project that keeps the name taken.
-- `edt_extension_properties` – read and set what an extension carries **inside an infobase** (safe
-  mode, protection from dangerous actions, active, scope). A newly registered extension gets safe
-  mode and dangerous-action protection **on**, and an extension that changes methods of the base
-  configuration cannot run under either.
+  updated. Manually deleting the folder leaves a project in the workspace that occupies the name.
+- `edt_extension_properties` reads and sets extension properties **inside an infobase**: safe
+  mode, protection from dangerous actions, active state and scope. A newly registered extension
+  has safe mode and dangerous-action protection **on**. An extension that changes base
+  configuration methods cannot run with either option enabled.
+
 - `edt_build_extension` and `edt_update_infobase` report `changesMethods` and, when true, name the
   two flags that must be off.
-- `edt-bridge-mcp` can be driven from a shell: `call <tool>`, `tools`, `status`. Until now anything
-  outside an MCP client meant hand-writing a client against port 8770. Exit codes separate "the call
-  could not be made" (1) from "the tool ran and failed" (2).
+- `edt-bridge-mcp` provides shell commands: `call <tool>`, `tools` and `status`. Previously,
+  use outside an MCP client required a custom client for port 8770. Exit code 1 means "the call
+  could not be made"; code 2 means "the tool ran and failed".
+
 - `self-update --from <checkout>` installs the wrapper from a local checkout instead of PyPI.
 - Platform and infobase tools: `edt_platform_installations`, `edt_register_platform`,
   `edt_create_infobase`, `edt_build_extension` (a `.cfe` through `ibcmd`).
@@ -808,18 +770,19 @@ to the code and the reasoning behind it.
   adopted**, the same step EDT's own wizard performs, so the engine writes everything an extension
   needs. Two consequences closed with it: adopted objects now carry the uuid link to the base object
   instead of binding by name, and the base configuration's default language comes along.
-- `edt_dump_external_object` builds an `.epf`/`.erf` again where EDT cannot: EDT resolves the newest
-  build of a version line, so a line topped by thin-client builds failed with
-  `MatchingRuntimeNotFound`. There is now an on-disk route, and the dry-run stopped lying about it.
+- `edt_dump_external_object` builds an `.epf`/`.erf` when EDT cannot. EDT selects the newest build
+  in a version line; a line topped by thin-client builds returned `MatchingRuntimeNotFound`.
+  An on-disk route is now available and described in the dry-run plan.
+
 - Modules of external objects resolve by FQN – `ExternalDataProcessor` and `ExternalReport` were
   simply absent from the folder map.
-- `self-update` could not update the wrapper on a current pipx: a uv-built venv has no pip at all. It
-  no longer uses an installer – the wheel is unpacked over the package with the standard library
-  alone.
-- The wrapper reported a stale version through two releases: `__init__.py` carried a literal that
+- `self-update` updates the wrapper in a pipx environment created with uv and no pip. The wheel
+  is unpacked over the package with the standard library, without an installer.
+
+- The wrapper reported an outdated version through two releases: `__init__.py` carried a literal that
   `pyproject.toml` did not use. The package version now derives from that one attribute.
-- The MCP server reports the plugin's own version from the bundle manifest instead of a hard-coded
-  string, so the dashboard and the handshake cannot drift apart.
+- The MCP server reports the plugin version from the bundle manifest instead of a hard-coded
+  string, so the dashboard and handshake report the same version.
 - The stdio wrapper pins its standard streams to UTF-8. On Windows they defaulted to the ANSI code
   page, so a "→" in a tool description aborted `tools/list` and the client registered no tools at all.
 - `edt_infobases` expands infobase groups, so grouped and server infobases are no longer omitted.
@@ -833,16 +796,18 @@ to the code and the reasoning behind it.
 ### Added
 - The full create / develop / build / deliver cycle exposed over MCP, with the write tools dry-run by
   default.
-- The `edt-bridge-mcp` stdio wrapper (pipx): forwards to a running EDT, auto-starts a headless one
-  when none is open, and delivers the plugin jar into EDT's `dropins/`.
-- `edt_platform_help` – the 1C:Enterprise Syntax Helper bundled with EDT: a real API reference,
-  searchable, Ru and En.
+- The `edt-bridge-mcp` stdio wrapper (pipx) forwards requests to a running EDT, starts headless
+  EDT when none is running, and installs the plugin jar in EDT's `dropins/`.
+
+- `edt_platform_help` provides a searchable 1C:Enterprise Syntax Helper bundled with EDT in
+  Russian and English.
+
 - A multi-threaded MCP server, and a free-port fallback: if 8770 is busy the next free port is used
   and the wrapper finds it.
 
 ### Fixed
-- Project-creation `apply` works reliably: a fresh detached Configuration or external data processor
-  is built and attached instead of tripping the headless EDT lifecycle.
+- Project-creation `apply` builds and attaches a detached Configuration or external data processor
+  while respecting the headless EDT lifecycle.
 
 ### Changed
 - House typography across the repository – en-dash instead of em-dash, three dots instead of the

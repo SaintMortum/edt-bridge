@@ -14,12 +14,12 @@ problem on the most recent release before you report it.
 
 ## Threat model
 
-This is what the bridge guards by design.
+The server and write tools use the following restrictions:
 
 - The MCP server binds **`127.0.0.1`** and nothing else. It never listens on a public interface.
-- **Write tools are guarded.** Each one requires a configured token, returns a plan until you pass
-  `apply=true`, and touches only your local EDT model. `edt_rename`, `edt_delete_object` and
-  `edt_delete_method` need an explicit `force` on top of that. `edt_evaluate` runs arbitrary BSL
+- **EDT model-changing tools** require a configured token and return a plan until `apply=true`
+  is passed. `edt_rename`, `edt_delete_object` and `edt_delete_method` also require `force`.
+  Debug tools require a token as well. `edt_evaluate` runs arbitrary BSL
   against a live infobase, so it needs a per-call opt-in **and** a server-side switch that is off by
   default.
 - Any local process can reach the port, so set a token on a shared machine: `EDT_BRIDGE_TOKEN` or

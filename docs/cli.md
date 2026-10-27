@@ -8,11 +8,11 @@ sidebar:
 
 <!-- Собрано из вывода `edt-bridge-mcp --help` скриптом scripts/gen-cli-docs.py. Не редактировать вручную. -->
 
-The `edt-bridge-mcp` wrapper serves an MCP client as a stdio server. The same executable also drives the bridge from a shell: whether it is up, which tools it serves, and what one of them answers. You do not have to start an agent for a check like that.
+The `edt-bridge-mcp` wrapper runs as a stdio MCP server for a client. From the command line, you can check bridge status, list tools, and call a tool without starting an agent.
 
-With no command the wrapper runs as an MCP server – that is how a client launches it. The commands below address that same bridge.
+With no command, the wrapper runs as an MCP server. The commands below use the same bridge.
 
-The exit code tells two outcomes apart. **1** means the call never happened: no bridge, or bad arguments. **2** means the tool ran and reported an error. In a script that is the difference between "the bridge is down" and "the bridge is up, but the job failed".
+Exit code **1** means the call did not run because the bridge did not start or the arguments were invalid. Exit code **2** means the tool ran and returned an error.
 
 ## No command: running as an MCP server
 
@@ -83,7 +83,7 @@ usage: edt-bridge-mcp call [-h] [--json JSON | --json-file PATH | --stdin] [--ra
 | `--no-autostart` | never launch a headless EDT |
 | `--version` | show the version and exit |
 
-Tool arguments come from `--json`, a file (`--json-file`) or standard input (`--stdin`). On Windows, non-ASCII arguments travel most reliably in a file: the console code page mangles them on the command line.
+Tool arguments come from `--json`, a file (`--json-file`) or standard input (`--stdin`). On Windows, pass non-ASCII arguments in a file because the console code page can corrupt them on the command line.
 
 ## `edt-bridge-mcp tools`
 
@@ -181,7 +181,7 @@ usage: edt-bridge-mcp gui [-h] [--force] [--timeout TIMEOUT] [--workspace WORKSP
 
 ## `edt-bridge-mcp plugins`
 
-List the wrapper's plugins: packages, entry points and the tools they add. Plugins live in the wrapper's own environment (pipx inject); no bridge is needed for this command.
+List the wrapper's plugins: packages, entry points and the tools they add. Plugins are installed in the wrapper's environment (pipx inject); no bridge is needed for this command.
 
 ```bash
 usage: edt-bridge-mcp plugins [-h] [--workspace WORKSPACE] [--edt-dir EDT_DIR]

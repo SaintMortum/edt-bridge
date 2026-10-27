@@ -29,20 +29,18 @@ COMMANDS = ["call", "tools", "status", "shutdown", "gui", "plugins", "self-updat
 
 TEXT = {
     "ru": {
+        "without_yo": True,
         "title": "Команды",
         "desc": "Справочник команд обвязки edt-bridge-mcp: вызов инструмента из командной строки, список инструментов, состояние моста и самообновление.",
         "label": "Команды",
         "order": 5,
         "intro": (
-            "Обвязка `edt-bridge-mcp` служит MCP-клиенту stdio-сервером. Тем же исполняемым "
-            "файлом мост вызывают и прямо из командной строки: посмотреть, поднят ли он, какие "
-            "инструменты отдаёт и что отвечает один из них. Ради такой проверки поднимать агента "
-            "не нужно.\n\n"
-            "Без команды обвязка работает как MCP-сервер – так её запускает клиент. Команды "
-            "ниже адресуют тот же мост.\n\n"
-            "Код возврата различает два разных исхода. **1** – вызов не состоялся: мост не "
-            "поднялся или аргументы неверны. **2** – инструмент отработал и вернул ошибку. "
-            "В скриптах это разница между \"мост лежит\" и \"мост жив, но задача не выполнена\"."
+            "Обвязка `edt-bridge-mcp` работает как stdio MCP-сервер для клиента. Из командной "
+            "строки можно проверить состояние моста, получить список инструментов и вызвать "
+            "инструмент без запуска агента.\n\n"
+            "Без команды обвязка работает как MCP-сервер. Команды ниже обращаются к тому же мосту.\n\n"
+            "Код возврата **1** означает, что вызов не состоялся: мост не запустился или "
+            "аргументы неверны. Код **2** означает, что инструмент выполнился и вернул ошибку."
         ),
         "common": "Без команды: запуск MCP-сервера",
         "col_opt": "Параметр",
@@ -52,8 +50,8 @@ TEXT = {
                      "commands": "Команды"},
         "note_args": (
             "Аргументы инструмента принимаются из `--json`, файла (`--json-file`) или потока "
-            "ввода (`--stdin`). На Windows кириллица в аргументах надёжнее всего доезжает "
-            "файлом: консольная кодировка в командной строке её портит."
+            "ввода (`--stdin`). На Windows передавать кириллицу в файле: консольная кодировка "
+            "может исказить аргументы командной строки."
         ),
     },
     "en": {
@@ -62,16 +60,13 @@ TEXT = {
         "label": "Commands",
         "order": 5,
         "intro": (
-            "The `edt-bridge-mcp` wrapper serves an MCP client as a stdio server. The same "
-            "executable also drives the bridge from a shell: whether it is up, which tools it "
-            "serves, and what one of them answers. You do not have to start an agent for a "
-            "check like that.\n\n"
-            "With no command the wrapper runs as an MCP server – that is how a client launches "
-            "it. The commands below address that same bridge.\n\n"
-            "The exit code tells two outcomes apart. **1** means the call never happened: no "
-            "bridge, or bad arguments. **2** means the tool ran and reported an error. In a "
-            "script that is the difference between \"the bridge is down\" and \"the bridge is "
-            "up, but the job failed\"."
+            "The `edt-bridge-mcp` wrapper runs as a stdio MCP server for a client. From the "
+            "command line, you can check bridge status, list tools, and call a tool without "
+            "starting an agent.\n\n"
+            "With no command, the wrapper runs as an MCP server. The commands below use the "
+            "same bridge.\n\n"
+            "Exit code **1** means the call did not run because the bridge did not start or "
+            "the arguments were invalid. Exit code **2** means the tool ran and returned an error."
         ),
         "common": "No command: running as an MCP server",
         "col_opt": "Option",
@@ -81,8 +76,8 @@ TEXT = {
                      "commands": "Commands"},
         "note_args": (
             "Tool arguments come from `--json`, a file (`--json-file`) or standard input "
-            "(`--stdin`). On Windows, non-ASCII arguments travel most reliably in a file: the "
-            "console code page mangles them on the command line."
+            "(`--stdin`). On Windows, pass non-ASCII arguments in a file because the console code "
+            "page can corrupt them on the command line."
         ),
     },
 }
@@ -151,13 +146,19 @@ def esc(s: str) -> str:
     return s.replace("|", "\\|")
 
 
-def esc_text(s: str) -> str:
+def esc_text(s: str, *, without_yo: bool = False) -> str:
     """Ordinary text: Markdown reads angle brackets as a tag and swallows them along with
     what is inside (`edt-bridge-mcp <command>` becomes `edt-bridge-mcp`), and the theme's
     typography glues a double hyphen into a dash - a flag mentioned in a description,
     `--json-file`, turns into an unusable `-json-file`. Inside backticks neither happens."""
     s = s.replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
-    return FLAG_RE.sub(r"`\1`", s)
+    s = FLAG_RE.sub(r"`\1`", s)
+    if not without_yo:
+        return s
+    # The Russian reference uses е in prose; keep code, URLs and quoted values intact.
+    pieces = re.split(r"(`[^`]*`|https?://[^\s]+|\"[^\"]*\"|'[^']*')", s)
+    return "".join(part if i % 2 else part.replace("ё", "е").replace("Ё", "Е")
+                   for i, part in enumerate(pieces))
 
 
 def children(entries: list, i: int) -> list[int]:
@@ -196,7 +197,7 @@ def render(help_text: str, t: dict) -> str:
     p = parse(help_text)
     out = io.StringIO()
     if p["description"]:
-        out.write(esc_text(p["description"]) + "\n\n")
+        out.write(esc_text(p["description"], without_yo=t.get("without_yo", False)) + "\n\n")
     out.write("```bash\n" + p["usage"] + "\n```\n\n")
     for title, entries in p["sections"]:
         if not entries:
@@ -210,11 +211,11 @@ def render(help_text: str, t: dict) -> str:
         for k, (opt, desc, _) in enumerate(entries):
             if k in skip:
                 continue
-            out.write(f"| `{esc(opt)}` | {esc_text(desc)} |\n")
+            out.write(f"| `{esc(opt)}` | {esc_text(desc, without_yo=t.get('without_yo', False))} |\n")
         out.write("\n")
     for paragraph in p["epilog"]:
         if paragraph:
-            out.write(esc_text(paragraph) + "\n\n")
+            out.write(esc_text(paragraph, without_yo=t.get("without_yo", False)) + "\n\n")
     return out.getvalue()
 
 

@@ -29,7 +29,7 @@ sidebar:
 The pipx wrapper delivers the jar and starts EDT for you. To run the plugin yourself instead:
 
 1. Get the jar from the [Releases page](https://github.com/keyfire/edt-bridge/releases), which also
-   carries a `SHA256SUMS.txt`, or build it as described below.
+   includes `SHA256SUMS.txt`, or build it as described below.
 2. Copy it into EDT's `dropins/`: on Windows `.../installations/<EDT>/1cedt/dropins/`, on **macOS**
    `.../1c-edt-<ver>-x86_64/1cedt (<ver>).app/Contents/Eclipse/dropins/`, creating the folder if it
    is not there. Keep only one EDT-Bridge jar in it, because two make Equinox load an arbitrary one.
@@ -42,13 +42,13 @@ and stops it in one action, and a running GUI EDT is never touched. To start the
 workspace: `scripts/run-gui.ps1 -Workspace <ws>`.
 
 Both scripts refuse to start a second EDT on a workspace that is already in use, and neither removes
-a lock that a live instance holds. The shared check lives in `scripts/edt-common.ps1`. Starting
-`1cedt.exe` by hand skips that check: the second instance dies with "workspace is already in use",
-and doing it twice leaves a pile of half-started windows.
+a lock held by a running instance. The shared check is in `scripts/edt-common.ps1`. Starting
+`1cedt.exe` manually bypasses the check: the second instance fails with "workspace is already in use".
+Repeating the attempt can leave partially started windows.
 
-An MCP client can also talk to the plugin over HTTP directly, with no wrapper. Add
+An MCP client can also connect to the plugin directly over HTTP. Add
 `{ "edt-bridge": { "type": "http", "url": "http://127.0.0.1:8770/mcp" } }` to its `.mcp.json`. The
-server speaks plain JSON-RPC over HTTP: `initialize`, `tools/list`, `tools/call`.
+server uses JSON-RPC over HTTP: `initialize`, `tools/list`, `tools/call`.
 
 ## Environment variables
 
@@ -70,7 +70,7 @@ flag twin, documented in [Commands](/cli).
 | `EDT_BRIDGE_WINDOW_WAIT` | – | `90` | how many seconds the `gui` command waits for the EDT window. A large workspace loads for minutes, so a miss here is not an error but a reason to run the command again |
 | `EDT_BRIDGE_LANG` | – | the system locale | the language of the wrapper's help and messages (`ru` or `en`) |
 | `EDT_BRIDGE_NO_PLUGINS` | – | off | `1` skips the discovery of [wrapper plugins](#wrapper-plugins), leaving the wrapper's own capabilities only |
-| `EDT_BRIDGE_PLUGIN_INDEX` | – | – | the package index URL `self-update` names to pip for plugins installed by project name. A plugin installed from git carries its own source |
+| `EDT_BRIDGE_PLUGIN_INDEX` | – | – | the package index URL `self-update` names to pip for plugins installed by project name. A plugin installed from git records its source |
 
 **Read by the plugin inside EDT**
 
@@ -78,11 +78,11 @@ flag twin, documented in [Commands](/cli).
 |----------|-----------------|---------|--------------|
 | `EDT_BRIDGE_PORT` | `-Dedt.bridge.port` | `8770` | the MCP server's port. A busy one makes it take the next free port |
 | `EDT_BRIDGE_TOKEN` | `-Dedt.bridge.token` | from the preference page | the shared secret every write tool requires |
-| `EDT_BRIDGE_ALLOW_EVALUATE` | – | off | `1` enables `edt_evaluate`, arbitrary BSL executed against a live infobase. The preference page carries the same switch |
+| `EDT_BRIDGE_ALLOW_EVALUATE` | – | off | `1` enables `edt_evaluate`, arbitrary BSL executed against a live infobase. The preference page has the same switch |
 | `EDT_BRIDGE_AGENT_IDLE_MINUTES` | `-Dedt.bridge.agent-idle-minutes` | `30` | after how many idle minutes a configurator agent stops itself. `off` keeps agents forever |
 
-What is given at launch wins. Environment variables and `-Dedt.bridge.*` properties take precedence
-over EDT's preference page, and that is how the wrapper drives a headless instance.
+Environment variables and `-Dedt.bridge.*` properties supplied at launch take precedence over
+EDT's preference page. The wrapper uses them to configure a headless instance.
 
 ### Build from source
 
@@ -109,11 +109,10 @@ the tagged source and compare.
 
 ## Wrapper plugins
 
-Not everything a team runs next to the bridge belongs in a public repository: reference material
-under somebody's license, tools wired to an internal service. Those live in separate packages
-installed into the wrapper's own environment. The wrapper finds them through the `edt_bridge.tools`
-entry-point group, lists the tools they declare next to the bridge's own, and dispatches them
-itself, so they answer even while no EDT is running.
+Wrapper plugins are distributed as separate packages and installed in the wrapper's environment.
+They can contain reference material under another license or tools for internal services. The
+wrapper discovers them through the `edt_bridge.tools` entry-point group, lists their tools alongside
+its own, and executes them. These tools are available without a running EDT.
 
 Installing one:
 
@@ -123,35 +122,33 @@ pipx inject edt-bridge-mcp <package>
 
 ### When pipx runs on uv (pipx >= 1.15)
 
-A pipx backed by uv builds the venv without pip, and three familiar moves stop working the way they
-read:
+When pipx uses uv, it creates the environment without pip. Note the following:
 
-- `--pip-args="--no-deps"` written as one token reaches uv already split and dies with uv's own
-  usage screen. Pass the flag as a separate argument:
+- When `--pip-args="--no-deps"` is written as one token, uv receives the argument split and displays
+  its usage message. Pass the flag as a separate argument:
   `pipx inject edt-bridge-mcp <package> --pip-args "--no-deps"`.
-- `<venv>/Scripts/python -m pip` answers "No module named pip". `pipx runpip edt-bridge-mcp` still
-  works, because pipx routes it into `uv pip` itself, and that is the supported way to reach the
-  environment.
-- reinstalling a plugin without `--no-deps` also reinstalls the core package, and it cannot replace
-  `edt-bridge-mcp.exe` while a live MCP session holds it ("failed to persist ... Access denied").
-  The plugin itself usually lands before the failure, so judge the outcome by
-  `edt-bridge-mcp plugins` rather than by the exit code.
+- `<venv>/Scripts/python -m pip` returns "No module named pip". Use `pipx runpip edt-bridge-mcp`
+  to access the environment: pipx routes the command to `uv pip`.
+- Reinstalling a plugin without `--no-deps` also reinstalls the core package. If an MCP session
+  holds `edt-bridge-mcp.exe` open, the file cannot be replaced ("failed to persist ... Access denied").
+  The plugin is usually installed before the failure. Check `edt-bridge-mcp plugins` for the result
+  instead of relying on the exit code.
 
-Here is the form that updates a plugin by hand without touching the busy core:
+To update a plugin without reinstalling the core package while it is in use, run:
 
 ```bash
 python -m pipx runpip edt-bridge-mcp -- install --upgrade --no-deps <package>
 ```
 
-Add `--index-url <your index>` when the plugin lives in a private registry.
+Add `--index-url <your index>` when the plugin is hosted in a private registry.
 
-`edt-bridge-mcp self-update` takes that same route for every installed plugin on its own, and
-`--plugins-only` limits it to the plugins. Each one is updated from the source it was installed
+`edt-bridge-mcp self-update` updates installed plugins. The `--plugins-only` flag limits the
+update to plugins. Each one is updated from the source it was installed
 from: its git repository, or a package index by project name, with `EDT_BRIDGE_PLUGIN_INDEX` naming
 the index for registry installs.
 
-`edt-bridge-mcp plugins` lists what is plugged in – packages, entry points and the tools they add –
-and prints the loader's message when a plugin is broken. `EDT_BRIDGE_NO_PLUGINS=1` turns the
+`edt-bridge-mcp plugins` lists installed packages, entry points and their tools. If a plugin fails
+to load, the command prints the loader's message. `EDT_BRIDGE_NO_PLUGINS=1` turns the
 discovery off.
 
 A plugin declares its tools in `pyproject.toml`:
@@ -162,16 +159,14 @@ package-name = "my_package.tools:tools"
 ```
 
 The value is a `Tool` from `edt_bridge_mcp.plugins`, a list of them, or a zero-argument callable
-returning either. A `Tool` carries the MCP descriptor – `name`, `description`, the JSON schema of
+returning either. A `Tool` contains the MCP descriptor – `name`, `description`, the JSON schema of
 the arguments – and the handler the wrapper calls. A str return becomes the text result, any other
 JSON-serializable value is pretty-printed as JSON, and an exception becomes the tool's error
-message. A failing entry point, a duplicated tool name and a name that shadows the wrapper's own
-tools are all refused loudly at discovery, because a silently dropped plugin would leave an agent
-without its tools and without an explanation.
+message. A failing entry point, duplicate tool name, or name that shadows a wrapper tool produces an error
+at discovery.
 
 A handler that also declares a `bridge` parameter – `handler(arguments, bridge)` – receives a
 callable `bridge(tool_name, arguments) -> str` that forwards one call to the live bridge and returns
-the text of its result. The wrapper never starts an EDT for it. With no bridge up the callable
-raises `RuntimeError` with a readable message, and the plugin answers with a note instead of hanging
-its caller through a minutes-long headless start. Older wrappers call such handlers with the single
-argument as before, so give `bridge` a default of `None`.
+the text of its result. This call does not start EDT. If the bridge is unavailable, the callable raises `RuntimeError` and
+the plugin returns its message. Older wrappers call such handlers with one argument, so give
+`bridge` a default of `None`.
