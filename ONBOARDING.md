@@ -2,10 +2,10 @@
 
 **English** · [Русский](docs/ru/ONBOARDING.ru.md)
 
-EDT-Bridge gives an AI agent – Claude Code and other MCP clients – access to the **live 1C:EDT
-model**. That covers reading metadata and BSL, query validation and the platform Syntax Helper, and
-it covers writing too: creating objects and extensions, refactoring, building `.epf` and `.erf`,
-updating infobases. All of it runs on EDT's own engine.
+EDT-Bridge provides Claude Code and other MCP clients with access to the 1C:EDT model. Its tools
+read metadata and BSL, validate queries, and access the platform Syntax Helper. They also create
+objects and extensions, refactor code, build `.epf` and `.erf` files, and update infobases. These
+operations use EDT's engine.
 
 It comes in two parts:
 
@@ -47,8 +47,7 @@ claude mcp add edt-bridge -- edt-bridge-mcp --workspace "D:\\path\\to\\edt-works
 `--workspace` is the EDT workspace folder, the one with `.metadata`, that the wrapper starts headless
 when EDT is not running. With a GUI EDT open and the plugin in it, the wrapper simply connects.
 
-Set a token to enable the write tools – create, refactor, build – so that they do more than return a
-plan:
+Set a token to apply changes with the write tools:
 
 ```bash
 claude mcp add edt-bridge --env EDT_BRIDGE_TOKEN=<any-string> -- \
@@ -60,7 +59,7 @@ claude mcp add edt-bridge --env EDT_BRIDGE_TOKEN=<any-string> -- \
 In a Claude Code session, ask for the project list or for an API reference: "show the open EDT
 projects" goes to `edt_projects`, "find ТаблицаЗначений.Добавить in the Syntax Helper" goes to
 `edt_platform_help`. The first call can take a few minutes while the wrapper starts a headless EDT
-and loads the model. After that it is instant.
+and loads the model. Once loaded, the tools are available for calls.
 
 Check the server by hand once EDT is up, GUI or headless:
 

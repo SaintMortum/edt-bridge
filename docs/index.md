@@ -6,30 +6,28 @@ sidebar:
   order: 1
 ---
 
-A small **1C:EDT plugin** that hands EDT's **live semantic model** to AI agents and other tools over
-the **Model Context Protocol (MCP)**.
+EDT-Bridge is a 1C:EDT plugin that provides AI agents and other tools with access to EDT's semantic
+model over the Model Context Protocol (MCP). The plugin requires a running EDT instance with the
+project open, either in the GUI or in headless mode.
 
-A static parser reads source files. EDT-Bridge asks the running IDE instead, so it can answer what
-only the *live* model knows: EDT's own validation problems, the real structure and types of the
-metadata, semantic cross-references, **query validation against the project's actual metadata**, and
-the **platform Syntax Helper** that ships with EDT. Reading is half of it. The write tools create,
-refactor, build and deliver; infobases and a debugger come with them. All of it runs on EDT's own
-engine.
+The tools provide EDT diagnostics, metadata structure and types, semantic references, and the
+platform Syntax Helper supplied with EDT. They validate queries against project metadata,
+create and rename objects, and build and deliver them. They also support infobase operations and
+debugging. These operations use EDT's own engine.
 
-> Read **and** write. Localhost only. A write needs the token and returns a plan until you ask for
-> more. The plugin lives inside EDT, so an EDT – GUI or headless – has to be up with your project.
+> The server is available only on localhost. Model-changing tools require a token and return a
+> plan by default. Debug tools also require a token.
 
-![An MCP client talks stdio to the edt-bridge-mcp wrapper; the wrapper checks port 8770, delivers the plugin jar from GitHub Releases and starts a headless EDT when needed; the plugin inside a GUI or headless EDT serves the live model, and reaches a running infobase through a configurator agent, ibcmd or rac](https://raw.githubusercontent.com/keyfire/edt-bridge/main/docs/architecture.svg)
+![An MCP client connects to edt-bridge-mcp over stdio. The wrapper checks port 8770, installs the plugin jar from GitHub Releases, and starts headless EDT when needed. The plugin in EDT provides the project model and accesses the infobase through a configurator agent, ibcmd, or rac](https://raw.githubusercontent.com/keyfire/edt-bridge/main/docs/architecture.svg)
 
 Development notes and updates (in Russian): the [1C × AI: engineering workshop](https://t.me/ceh_1c_ai) Telegram channel.
 
 ## Install (recommended: pipx)
 
-One command sets up both halves, the client wrapper and the plugin. The
-[**edt-bridge-mcp**](https://github.com/keyfire/edt-bridge/blob/main/python/README.md) wrapper is a
-stdio MCP server that your client talks to. It forwards to a running EDT, **starts a headless EDT**
-when none is open, and **delivers the plugin jar** into EDT's `dropins/` when it is missing. You
-never copy a jar by hand.
+The [**edt-bridge-mcp**](https://github.com/keyfire/edt-bridge/blob/main/python/README.md) wrapper
+runs as a stdio MCP server for the client and forwards requests to EDT. If EDT is not running, the
+wrapper starts it in headless mode. If the plugin jar is missing from EDT's `dropins/`, the wrapper
+installs it.
 
 ```bash
 pipx install edt-bridge-mcp
@@ -42,7 +40,7 @@ to serve when the wrapper starts a headless EDT:
 claude mcp add edt-bridge -- edt-bridge-mcp --workspace "D:\\path\\to\\edt-workspace"
 ```
 
-That is the whole setup. Wrapper flags, the write-tools token and `self-update` are documented in
+Wrapper flags, the write-tools token and `self-update` are documented in
 [python/README.md](https://github.com/keyfire/edt-bridge/blob/main/python/README.md). To run the
 plugin yourself, without the wrapper, see
 [Manual install](/install#manual-install-without-the-wrapper).
@@ -71,15 +69,14 @@ token comes from when the bridge runs inside a GUI EDT:
 | **MCP server port** | 8770 by default. **It takes effect after EDT restarts**, so the running server keeps the old port until then. |
 | **Allow arbitrary BSL evaluation while debugging** | Off by default. It guards `edt_evaluate`, which executes code against a live infobase. Test stands only. |
 
-**A launch parameter wins over this page.** `-Dedt.bridge.*` system properties and `EDT_BRIDGE_*`
+**Launch parameters take precedence over this page.** `-Dedt.bridge.*` system properties and `EDT_BRIDGE_*`
 environment variables given at startup take precedence over the stored values. That is how the
 wrapper drives a headless EDT, and it is also why a token set here can look ignored when one was
 passed on the command line as well.
 
 ## Nearby
 
-EDT-Bridge works with 1C:Enterprise. The neighbouring platform, 1C:Element, has a pair of tools
-built on the same idea: give the agent hands, not advice.
+EDT-Bridge works with 1C:Enterprise. The following tools are available for the 1C:Element technology:
 
 - **[XBSL](https://docs.keyfire.ru/xbsl/)** – a linter for Element sources with autofixes, an LSP server,
   metadata scaffolding, an MCP server and a VS Code extension.

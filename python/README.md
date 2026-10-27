@@ -4,9 +4,8 @@
 
 stdio MCP front-end for the [edt-bridge](https://github.com/keyfire/edt-bridge) 1C:EDT plugin.
 
-The Java plugin serves MCP as plain JSON-RPC over HTTP on `127.0.0.1:8770`, which means an MCP client
-configured with that URL loses the server whenever EDT is not running. This wrapper is what the
-client talks to instead:
+The Java plugin serves MCP as JSON-RPC over HTTP on `127.0.0.1:8770`. An MCP client configured
+with that address cannot reach the server when EDT is stopped. The wrapper provides these behaviors:
 
 - **EDT open**, GUI or headless, and every request is forwarded to the live bridge;
 - **EDT closed**, and it **starts a headless EDT** – `1cedtcli` with a keepalive pipe, the same
@@ -33,9 +32,9 @@ claude mcp add edt-bridge -- edt-bridge-mcp --workspace "D:\\path\\to\\edt-works
 
 ## From a shell
 
-The default mode speaks JSON-RPC over stdin and stdout, for an MCP client to drive. To reach the same
-bridge by hand or from a script, use the sub-commands. Same port scan, same token, same headless
-start:
+By default, the wrapper uses JSON-RPC over stdin and stdout to communicate with an MCP client.
+Use subcommands to access the bridge manually or from a script. They use the same port scan, token,
+and automatic headless start:
 
 ```bash
 edt-bridge-mcp tools                    # what the running bridge serves
@@ -80,11 +79,10 @@ pipx 1.15 builds its venvs through uv, and a uv-built venv contains no pip at al
 
 ## Plugins
 
-External packages installed into the wrapper's environment can add MCP tools of their own. This is
-the home for what a public repository cannot carry: reference material under somebody's license,
-tools wired to an internal service. The wrapper finds them through the `edt_bridge.tools`
-entry-point group, lists their tools next to the bridge's and dispatches them itself, so they answer
-even while no EDT is running.
+External packages installed in the wrapper's environment can add MCP tools. They can contain
+reference material under another license or tools for internal services. The wrapper discovers them
+through the `edt_bridge.tools` entry-point group, lists their tools alongside its own, and executes
+them. These tools are available without a running EDT.
 
 ```bash
 pipx inject edt-bridge-mcp <package>   # install a plugin
@@ -94,9 +92,8 @@ edt-bridge-mcp plugins                 # what is plugged in, or why a plugin ref
 `EDT_BRIDGE_NO_PLUGINS=1` turns the discovery off. The declaration contract for plugin authors is on
 the [installation page](https://docs.keyfire.ru/edt-bridge/install#wrapper-plugins).
 
-The exes in `Scripts` are never touched. They are what a running client holds open, Windows will not
-let them be replaced, and they do not need to be: the stub launches whatever code is in site-packages
-the next time it starts. `pipx_metadata.json` is corrected, so `pipx list` does not go on reporting
+The executables in `Scripts` are not replaced because a running client may hold them open on
+Windows. The stub loads the updated code from site-packages on its next start. `pipx_metadata.json` is corrected, so `pipx list` does not go on reporting
 the old version. An editable install is refused rather than overwritten.
 
 ## Configuration

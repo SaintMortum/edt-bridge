@@ -12,7 +12,7 @@ reading EDT's own validation markers, metadata details, and symbol and type info
 
 ## Why a plugin
 
-EDT's semantic model – the BM model and AST, content assist, validation, the query language – lives
+EDT's semantic model – the BM model and AST, content assist, validation, the query language – is available
 **inside the EDT JVM**. The only way in is an Eclipse/OSGi plugin using the public
 `com._1c.g5.v8.dt.*` APIs, and an external process cannot reach it at all. So the bridge is a small
 Java/EDT plugin with an MCP server embedded in it.
@@ -21,8 +21,7 @@ Java/EDT plugin with an MCP server embedded in it.
 
 - An **Eclipse/OSGi plugin** loaded by 1C:EDT through `org.eclipse.ui.startup`, running in EDT's JVM.
 - It embeds a minimal **MCP server over HTTP**, bound to `127.0.0.1`, on port `8770` by default.
-- It needs EDT running with the workspace open. When the model is not available, the tools say so
-  plainly instead of failing in some opaque way.
+- It needs EDT running with the workspace open. When the model is unavailable, the tools return a clear error.
 
 ## Tool surface (read-only)
 
