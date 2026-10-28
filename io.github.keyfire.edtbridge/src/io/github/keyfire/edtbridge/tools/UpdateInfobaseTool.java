@@ -79,10 +79,10 @@ public final class UpdateInfobaseTool {
         props.add("updateDatabaseConfig", boolProp("agent transport: apply the database configuration "
                 + "after loading (default true). Off leaves the infobase holding new code and running "
                 + "the old one until edt_update_database_config is called."));
-        props.add("fullLoad", boolProp("agent transport: load the whole configuration even when only some "
-                + "files changed since this bridge's last load (default false). Without it the files "
-                + "that differ are loaded on their own whenever that is provably safe - the result's "
-                + "loadMode and loadReason say which happened and why."));
+        props.add("fullLoad", boolProp("agent transport: load the whole configuration (default false). "
+                + "Otherwise, compare the full export with the last successful load and load only changed "
+                + "files when the saved infobase, platform and configuration generation match and no "
+                + "full-load condition applies. loadMode and loadReason report the selected mode and reason."));
         props.add("answer", strProp("agent transport: which option to give when the platform stops and asks - the "
                 + "value it offered (or the label). Left out, the question comes back in \"question\" "
                 + "with its options and NOTHING is answered: one option ends other users' sessions "
@@ -118,12 +118,13 @@ public final class UpdateInfobaseTool {
                 + "That is the only way into a server infobase that has users, and it loads XML "
                 + "straight into the base - no throwaway base and no .cf in between, which matters for "
                 + "a large configuration. It then applies the database configuration unless "
-                + "updateDatabaseConfig=false. The configuration is loaded file by file when that is "
-                + "provably safe: only the files that differ from this bridge's last load are sent, and "
-                + "anything that cannot be proven safe - no record of a last load, another platform, an "
-                + "infobase changed since by anyone else, a removed file, a changed Configuration.xml - "
-                + "loads it whole. loadMode (full, partial, skipped) and loadReason report the choice; "
-                + "fullLoad=true forces the whole. An extension is always loaded whole.");
+                + "updateDatabaseConfig=false. The full export is compared with the last successful load "
+                + "into the same infobase. Only changed files are loaded when the platform version and "
+                + "configuration generation match, no files were removed, Configuration.xml and "
+                + "Ext/ParentConfigurations.bin are unchanged, and no more than half the files changed. "
+                + "Unmet conditions require a full load; a matching export skips file loading. "
+                + "loadMode (full, partial, skipped) and loadReason report the selected mode and reason. "
+                + "fullLoad=true requests a full load. Extensions are always loaded in full.");
         t.addProperty("descriptionRu",
                 "ЗАПИСЬ (Phase 2): обновить конфигурацию информационной базы ИЗ проекта EDT "
                 + "(конфигурация или расширение) штатным механизмом синхронизации (действие "
@@ -140,12 +141,14 @@ public final class UpdateInfobaseTool {
                 + "БАЗЫ. Только так доступна серверная база с пользователями, и XML грузится прямо в "
                 + "базу – без промежуточной базы и без .cf, что существенно для большой конфигурации. "
                 + "После загрузки применяется конфигурация базы данных, если не указано "
-                + "updateDatabaseConfig=false. Конфигурация загружается по файлам, когда это доказуемо "
-                + "безопасно: отправляются только файлы, отличающиеся от прошлой загрузки этим мостом, а "
-                + "всё, что безопасным не доказано, - нет записи о прошлой загрузке, другая платформа, "
-                + "базу с тех пор менял кто-то ещё, файл исчез, изменился Configuration.xml - грузит её "
-                + "целиком. Выбор сообщают loadMode (full, partial, skipped) и loadReason; fullLoad=true "
-                + "требует полной загрузки. Расширение всегда загружается целиком.");
+                + "updateDatabaseConfig=false. Полная выгрузка сравнивается с последней успешной "
+                + "загрузкой в ту же базу. Только измененные файлы загружаются при совпадении версии "
+                + "платформы и поколения конфигурации, отсутствии удаленных файлов, неизмененных "
+                + "Configuration.xml и Ext/ParentConfigurations.bin и изменении не более половины файлов. "
+                + "При невыполнении условий конфигурация загружается целиком; при совпадении выгрузок "
+                + "загрузка файлов пропускается. loadMode (full, partial, skipped) и loadReason "
+                + "содержат режим и причину выбора; fullLoad=true задает полную загрузку. "
+                + "Расширения всегда загружаются целиком.");
         t.add("inputSchema", schema);
         return t;
     }

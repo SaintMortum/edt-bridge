@@ -46,9 +46,9 @@ MESSAGES = {
               "       %(prog)s <command> [options]",
     },
     "server.description": {
-        "ru": "stdio-обвязка MCP для плагина edt-bridge к 1С:EDT: пересылает запросы в\n"
-              "запущенную EDT, а если ни одной нет – поднимает headless.\n\n"
-              "Без команды обвязка говорит JSON-RPC через stdin/stdout – так её запускает\n"
+        "ru": "MCP-сервер stdio для плагина edt-bridge к 1С:EDT: передает запросы в\n"
+              "запущенную EDT и запускает headless EDT при отсутствии работающей среды.\n\n"
+              "Без команды обвязка использует JSON-RPC через stdin/stdout. Ее запускает\n"
               "MCP-клиент. Команды ниже адресуют тот же мост из командной строки.",
         "en": "stdio MCP front-end for the edt-bridge 1C:EDT plugin: proxies to a running\n"
               "EDT, or auto-starts a headless one.\n\n"
@@ -58,8 +58,8 @@ MESSAGES = {
     "server.epilog": {
         "ru": "команды:\n"
               "  call <инструмент>   вызвать один инструмент моста и напечатать ответ\n"
-              "  tools               перечислить инструменты, которые отдаёт мост\n"
-              "  status              состояние запущенного моста (сам его не поднимает)\n"
+              "  tools               перечислить инструменты запущенного моста\n"
+              "  status              состояние моста без его запуска\n"
               "  shutdown            штатно завершить EDT, обслуживающую мост\n"
               "  gui                 остановить headless и открыть клиентскую EDT\n"
               "  plugins             перечислить плагины обвязки и их инструменты\n"
@@ -106,11 +106,11 @@ MESSAGES = {
         "en": "Call one bridge tool and print its result.",
     },
     "tools.description": {
-        "ru": "Перечислить инструменты, которые отдаёт запущенный мост.",
+        "ru": "Перечислить инструменты запущенного моста.",
         "en": "List the tools the running bridge serves.",
     },
     "status.description": {
-        "ru": "Состояние запущенного моста (сам его не поднимает) и версия jar в dropins - "
+        "ru": "Состояние моста без его запуска и версия jar в dropins - "
               "кода, который EDT загрузит при следующем запуске.",
         "en": "Report the running bridge (does not start one) and the version of the jar in "
               "dropins - the code EDT will load next time it starts.",
@@ -122,24 +122,24 @@ MESSAGES = {
               "A headless one is relaunched on the next call; a GUI is left alone without --force.",
     },
     "shutdown.force": {
-        "ru": "завершать и GUI EDT: без этого флага мост отказывает, чтобы не закрыть чьё-то окно",
+        "ru": "разрешить завершение GUI EDT; без этого флага завершение GUI запрещено",
         "en": "shut a GUI EDT down too: without this flag the bridge refuses rather than close "
               "somebody's window",
     },
     "shutdown.no-wait": {
-        "ru": "не ждать фактической остановки (по умолчанию команда ждёт закрытия порта до 60 секунд)",
+        "ru": "не ждать остановки (по умолчанию ожидание закрытия порта составляет до 60 секунд)",
         "en": "do not wait for the bridge to go down (the default waits up to 60 seconds)",
     },
     "gui.description": {
         "ru": "Передать рабочую область клиентской EDT: остановить headless, дождаться, пока его "
               "процессы действительно исчезнут, и запустить окно EDT на той же рабочей области. "
-              "Сама обвязка headless при этом не поднимает.",
+              "Обвязка не запускает headless EDT при выполнении команды.",
         "en": "Hand the workspace over to the GUI EDT: stop the headless one, wait until its "
               "processes are really gone, and open the EDT window on the same workspace. "
               "Never starts a headless EDT on the way.",
     },
     "gui.force": {
-        "ru": "снять headless принудительно, если он не завершился за отведённое время",
+        "ru": "завершить headless принудительно, если он не остановился за отведенное время",
         "en": "kill the headless session when it does not stop within the timeout",
     },
     "gui.timeout": {
@@ -148,10 +148,10 @@ MESSAGES = {
     },
     "plugins.description": {
         "ru": "Перечислить плагины обвязки: пакеты, точки расширения и добавленные ими "
-              "инструменты. Плагины живут в окружении самой обвязки (pipx inject), мост "
+              "инструменты. Плагины установлены в окружении обвязки (pipx inject), мост "
               "для этой команды не нужен.",
         "en": "List the wrapper's plugins: packages, entry points and the tools they add. "
-              "Plugins live in the wrapper's own environment (pipx inject); no bridge is "
+              "Plugins are installed in the wrapper's environment (pipx inject); no bridge is "
               "needed for this command.",
     },
     "call.tool": {
@@ -163,7 +163,7 @@ MESSAGES = {
         "en": "tool arguments as a JSON object",
     },
     "call.json-file": {
-        "ru": "читать объект JSON из файла в UTF-8 – надёжный путь для аргументов "
+        "ru": "читать объект JSON из файла в UTF-8; этот способ подходит для аргументов "
               "с неанглийским текстом на Windows",
         "en": "read the JSON object from a UTF-8 file - the reliable route for "
               "arguments with non-ASCII text on Windows",
@@ -180,7 +180,7 @@ MESSAGES = {
     "update.usage": {
         "ru": """usage: edt-bridge-mcp self-update [опции]
 
-Обновить jar плагина в dropins у EDT, саму обвязку в её окружении и плагины обвязки.
+Обновить jar плагина в dropins EDT, обвязку в ее окружении и плагины обвязки.
 
 параметры:
   --jar-only        только jar плагина (GitHub Releases)
@@ -195,9 +195,9 @@ exe в Scripts не трогаются, поэтому запущенные edt-
 реестр пакетов; реестру можно указать адрес переменной EDT_BRIDGE_PLUGIN_INDEX).
 
 коды возврата:
-  0    всё, что просили, обновилось
+  0    все выбранные компоненты обновлены
   1    не обновился сам мост (jar или обвязка) либо не обновилось ничего
-  2    мост обновлён, не встал только плагин обвязки""",
+  2    мост обновлен, плагин обвязки не установлен""",
         "en": """usage: edt-bridge-mcp self-update [options]
 
 Refresh the plugin jar in EDT's dropins, this wrapper in its own environment, and

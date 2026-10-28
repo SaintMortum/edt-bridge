@@ -134,3 +134,16 @@ def test_committed_pages_are_current(generator):
     for fname, text in generator.generate().items():
         committed = (DOCS / fname).read_text(encoding="utf-8")
         assert committed == text, f"{fname} is stale: rerun python scripts/gen-cli-docs.py"
+
+
+def test_russian_reference_preserves_identifiers_while_normalizing_prose(generator):
+    help_text = "usage: tool --test Ёлка\n\nКоманда берёт `Ёлка`.\n\noptions:\n  --test  Ищёт `Ёлка`\n"
+    ru = generator.render(help_text, {**generator.TEXT["ru"], "without_yo": True})
+    en = generator.render(help_text, {**generator.TEXT["en"], "without_yo": False})
+    assert "Команда берет `Ёлка`." in ru
+    assert "Ищет `Ёлка`" in ru
+    assert "usage: tool --test Ёлка" in ru
+    assert "Команда берёт `Ёлка`." in en
+    assert generator.esc_text("Берёт 'Ёлка' и \"Ёлка\" с https://example.test/Ёлка", without_yo=True) == (
+        "Берет 'Ёлка' и \"Ёлка\" с https://example.test/Ёлка"
+    )

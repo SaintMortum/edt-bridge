@@ -63,10 +63,17 @@
 }
 
 :root {
+  /* Match the text column width of the XBSL documentation. */
+  --blume-content-width: 60rem;
   --blume-font-body: "Inter Cyrillic",
     var(--blume-ff-inter, ui-sans-serif, system-ui, sans-serif);
   --blume-font-display: "Inter Tight Cyrillic",
     var(--blume-ff-inter-tight, ui-sans-serif, system-ui, sans-serif);
   --blume-font-mono: "Geist Mono Cyrillic",
     var(--blume-ff-geist-mono, ui-monospace, "Cascadia Code", Consolas, monospace);
+}
+
+/* Wrap long identifiers in prose without changing preformatted examples. */
+article :not(pre) > code {
+  overflow-wrap: anywhere;
 }
